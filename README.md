@@ -12,7 +12,7 @@
 **示範網站（語音教學、範例畫面）：https://achir1015.github.io/zms-attendance/**
 
 - [主要功能](#主要功能)
-- [安裝 Windows](#安裝windows-1011)／[安裝 macOS](#安裝macos-11-以上)／[iPhone、iPad](#iphoneipad-app)
+- [安裝 Windows](#安裝windows-1011)／[安裝 macOS](#安裝macos-11-以上)／[iPhone、iPad、Android](#iphoneipadandroid-app)
 - [虛擬 U 盤：放置與接法](#虛擬-u-盤放置與接法)
 - [虛擬 U 盤：設定](#虛擬-u-盤設定)
 - [虛擬 U 盤：功能](#虛擬-u-盤功能)
@@ -34,7 +34,7 @@
 | **U600 搬移** | 從 U600 的 `tmkq.mdb` 一次搬來部門、員工、卡號與舊打卡紀錄（只讀，不改 U600） |
 | **語音動態教學** | 11 課臺灣華語語音，步驟依旁白依序點亮；虛擬 U 盤的接法附雙接頭示意圖 |
 | **線上版** | 公司電腦開網頁服務，同網路的電腦、平板用瀏覽器登入使用；另有 GitHub Pages 示範網站 |
-| **iPhone／iPad App** | 經公司電腦的「手機 App 連線」使用：查打卡、編機器工號與卡號、上傳打卡檔、經虛擬 U 盤送人員資訊表、語音教學 |
+| **iPhone／iPad／Android App** | 經公司電腦的「手機 App 連線」使用：查打卡、編機器工號與卡號、上傳打卡檔、經虛擬 U 盤送人員資訊表、語音教學 |
 | **版本更新** | 程式內檢查 GitHub Releases、下載後自動安裝並重新開啟；虛擬 U 盤的韌體也由系統無線更新 |
 
 ## 安裝（Windows 10／11）
@@ -58,15 +58,17 @@
 | Windows 10／11 | `ZMSAttendance-Setup-<版本>.exe` |
 | macOS 11 以上（Intel；Apple 晶片經 Rosetta 2） | `ZMSAttendance-<版本>-mac.dmg` |
 | iPhone／iPad | 用 Safari 開 [安裝頁](https://achir1015.github.io/zms-attendance/ios/)（內部測試版，限已登記的裝置） |
+| Android 7.0 以上 | `ZMSAttendance-<版本>-android.apk`（手機下載安裝；第一次請允許「安裝未知來源的 App」，Play Protect 提示時選「仍要安裝」） |
 
-## iPhone／iPad App
+## iPhone／iPad／Android App
 
 資料一律在公司電腦（人事系統的 MariaDB），App 經公司電腦考勤系統的「手機 App 連線」服務使用，和人事系統的手機版做法相同。
 
 1. 公司電腦的考勤系統 →「系統與更新」→ 打開 **手機 App 連線**（預設埠 `8797`），畫面會顯示網址與 QR Code。
-2. iPhone／iPad 用 Safari 開 https://achir1015.github.io/zms-attendance/ios/ 安裝 App。
-3. 用相機掃電腦畫面上的 QR Code（`zmsatt://connect?u=…`），App 會自動帶入連線網址；第一次請允許「區域網路」。
-4. 用人事系統的帳號登入（需要「出勤管理」權限）。iPhone 直向是上方工具列＋選單；iPad 橫向是電腦版的側邊選單。
+2. iPhone／iPad 用 Safari 開 https://achir1015.github.io/zms-attendance/ios/ 安裝 App；Android 用手機到 [Releases](https://github.com/achir1015/zms-attendance/releases/latest) 下載 APK 安裝。
+3. 用相機掃電腦畫面上的 QR Code（`zmsatt://connect?u=…`），App 會自動帶入連線網址（iPhone 第一次請允許「區域網路」）。
+4. 用人事系統的帳號登入（需要「出勤管理」權限）。手機直向是上方工具列＋選單；iPad 橫向是電腦版的側邊選單。
+5. 有新版本時，App 選單最上方會出現提示：Android 點一下下載新的 APK 覆蓋安裝，iPhone／iPad 開啟安裝頁。
 
 | 手機上可以 | 只在電腦上 |
 |---|---|
@@ -201,7 +203,13 @@ macOS（在 Mac 上，需要 Developer ID 憑證與 notarytool 設定檔 `zms-no
 
 ```bash
 bash tools/build_macos.sh                      # → dist-mac/ZMSAttendance-<版本>-mac.dmg
+DMG_ONLY=1 bash tools/build_macos.sh           # 只重做 DMG（Apple 時間戳記服務暫時中斷時）
+bash tools/ios_in_terminal.sh                  # iPhone／iPad（Ad Hoc）→ dist-ios/ZMSAttendance-<版本>-ios.ipa
+bash tools/build_android.sh                    # Android → dist-android/ZMSAttendance-<版本>-android.apk
 ```
+
+Android 簽章金鑰 `android/zmsattendance.jks` 第一次建置時自動產生，不進 git，請另外備份（遺失後手機無法直接覆蓋更新）。
+手機版開發預覽：`python tools/api_server.py`（手機 App 連線服務）＋ `python run_web_mobile.py`（iPhone 版面，`--tablet` 為 iPad 版面）。
 
 考勤機的網路協定（埠 5005）沒有公開文件，原廠 U600 也無法以網路連線這一型機器，所以本系統以 U 盤（含虛擬 U 盤）交換資料。
 

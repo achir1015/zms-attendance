@@ -16,3 +16,4 @@ dist-ios/
 dist-mac/
 dist/
 tests/_db/
+android/
