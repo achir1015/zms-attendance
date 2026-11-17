@@ -16,6 +16,8 @@ import time
 
 from . import APP_ID, HR_APP_ID
 
+HR_APP_NAME = "資料助秘之一般公司人事薪資差勤"
+
 NO_WINDOW = 0x08000000 if os.name == "nt" else 0
 
 
@@ -110,6 +112,8 @@ class HRDatabase:
         self.password = st.get("password", "")
         self.database = st.get("database", "zms_general_hr")
         self.mariadb_bin = st.get("mariadb_bin", "")
+        if not os.path.isfile(self._bin("mariadbd")):
+            self.mariadb_bin = self._find_hr_mariadb() or self.mariadb_bin
         self.datadir = st.get("datadir") or os.path.join(hr_dir, "mariadb")
         self.proc = None            # 由本系統啟動的資料庫
 
@@ -130,6 +134,23 @@ class HRDatabase:
     # ------------------------------------------------------------------ 啟停
     def _bin(self, name):
         return os.path.join(self.mariadb_bin, name + (".exe" if os.name == "nt" else ""))
+
+    @staticmethod
+    def _find_hr_mariadb():
+        """人事系統搬家或更新後，settings.json 記的路徑可能失效：改找安裝版附帶的資料庫程式。"""
+        exe = "mariadbd.exe" if os.name == "nt" else "mariadbd"
+        cands = [os.environ.get("HR_MARIADB_BIN", "")]
+        if sys.platform == "darwin":
+            for base in ("/Applications", os.path.expanduser("~/Applications")):
+                cands.append(os.path.join(base, HR_APP_NAME + ".app", "Contents", "Resources", "mariadb", "bin"))
+        elif os.name == "nt":
+            for base in (os.path.join(os.environ.get("LOCALAPPDATA", ""), "Programs"),
+                         os.environ.get("ProgramFiles", ""), os.environ.get("ProgramFiles(x86)", "")):
+                cands.append(os.path.join(base, HR_APP_ID, "mariadb", "bin"))
+        for c in cands:
+            if c and os.path.isfile(os.path.join(c, exe)):
+                return c
+        return ""
 
     def ensure_running(self, timeout=40):
         """資料庫沒在跑就用人事系統的 my.ini 啟動（只限內建資料庫模式）。回傳 True＝本系統啟動的。"""

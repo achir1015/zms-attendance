@@ -440,6 +440,12 @@ class U600(ft.Column):
                                      spacing=10, wrap=True),
                               ft.Row([T.btn("讀取並預覽", I.PREVIEW, self.read), self.leaved], spacing=16)], spacing=12)),
             self.info], spacing=18, scroll=ft.ScrollMode.AUTO, expand=True)
+        if os.name != "nt":
+            self.info.controls = [T.card(ft.Row([T.icon_tile(I.INFO_OUTLINE, "amber", 44), ft.Column([
+                T.title_text("U600 搬移請在 Windows 版進行", 16),
+                T.muted("U600 是 Windows 軟體，它的 tmkq.mdb 只能在 Windows 讀取。請在原本裝 U600 的 Windows 電腦"
+                        "安裝本系統並搬移一次；資料會存進人事系統的資料庫，之後 Mac 版直接就能使用。", 13)],
+                spacing=4, expand=True)], spacing=14))]
 
     async def browse(self, e):
         fs = await ft.FilePicker().pick_files(dialog_title="選擇 U600 的 tmkq.mdb", allowed_extensions=["mdb"])

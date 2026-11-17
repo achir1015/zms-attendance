@@ -10,7 +10,7 @@
 員工直接用人事系統的員工，打卡寫進人事系統的打卡紀錄，出勤日報、月報與薪資計算直接使用。
 
 - [主要功能](#主要功能)
-- [安裝](#安裝windows-1011)
+- [安裝 Windows](#安裝windows-1011)／[安裝 macOS](#安裝macos-11-以上)
 - [虛擬 U 盤：放置與接法](#虛擬-u-盤放置與接法)
 - [虛擬 U 盤：設定](#虛擬-u-盤設定)
 - [虛擬 U 盤：功能](#虛擬-u-盤功能)
@@ -39,6 +39,19 @@
 3. 開啟「資料助秘刷卡考勤系統」，用人事系統的帳號登入（需要「出勤管理」權限）。
 4. 到「考勤機」頁新增考勤機（機號要和機器【通訊設置】的機號相同）。
 5. 接好並設定虛擬 U 盤（下一節）。以前用過 U600 的，到「U600 搬移」一次搬入舊資料。
+
+## 安裝（macOS 11 以上）
+
+1. 先安裝並設定好 [資料助秘之一般公司人事薪資差勤](https://github.com/achir1015/zms-general-hr) 的 macOS 版（放在「應用程式」）。
+2. 到 [Releases](https://github.com/achir1015/zms-attendance/releases/latest) 下載 `ZMSAttendance-<版本>-mac.dmg`，
+   打開後把「資料助秘刷卡考勤系統」拖進「應用程式」（已經過 Apple 公證，可直接開啟）。
+3. 第一次啟用虛擬 U 盤的接收服務時，macOS 會詢問是否允許接受連入連線，請按「允許」。
+4. 「U600 搬移」要在 Windows 版進行（U600 是 Windows 軟體）；搬好的資料存在人事系統的資料庫，Mac 版直接可用。
+
+| 平台 | 下載檔 |
+|---|---|
+| Windows 10／11 | `ZMSAttendance-Setup-<版本>.exe` |
+| macOS 11 以上（Intel；Apple 晶片經 Rosetta 2） | `ZMSAttendance-<版本>-mac.dmg` |
 
 ## 虛擬 U 盤：放置與接法
 
@@ -137,6 +150,12 @@ python -m venv .venv
 .venv\Scripts\python tools\make_voice.py       # 產生語音教學 MP3
 .venv\Scripts\python tools\make_guide_images.py  # 產生接法示意圖
 .venv\Scripts\python tools\build_windows.py    # 產生安裝檔
+```
+
+macOS（在 Mac 上，需要 Developer ID 憑證與 notarytool 設定檔 `zms-notary` 才會簽章公證）：
+
+```bash
+bash tools/build_macos.sh                      # → dist-mac/ZMSAttendance-<版本>-mac.dmg
 ```
 
 考勤機的網路協定（埠 5005）沒有公開文件，原廠 U600 也無法以網路連線這一型機器，所以本系統以 U 盤（含虛擬 U 盤）交換資料。

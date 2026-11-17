@@ -20,6 +20,9 @@ DEFAULT_MDB = r"D:\U600_FT\tmkq.mdb"
 
 
 def export_mdb(mdb, out_json, script, password="Timmy"):
+    if os.name != "nt":
+        raise BizError("U600 是 Windows 軟體，它的資料庫要在 Windows 版的本系統搬移；"
+                       "搬好的資料存在人事系統的資料庫，Mac 版直接就能使用")
     if not os.path.isfile(PS32):
         raise BizError("這台電腦沒有 32 位元 PowerShell，無法讀取 U600 資料庫")
     r = subprocess.run([PS32, "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script, "-Db", mdb,

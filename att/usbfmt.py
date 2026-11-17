@@ -185,11 +185,13 @@ def find_usb_files(folder):
 
 
 def removable_drives():
-    """Windows 的卸除式磁碟（U 盤）根目錄。"""
+    """卸除式磁碟（U 盤）根目錄：Windows 的卸除式磁碟機、macOS 的 /Volumes。"""
     if os.name != "nt":
         base = "/Volumes" if os.path.isdir("/Volumes") else "/media"
         try:
-            return [os.path.join(base, d) for d in os.listdir(base)]
+            # macOS 的 /Volumes 也列出開機磁碟（指向 / 的替身），要排除
+            return [os.path.join(base, d) for d in os.listdir(base)
+                    if not os.path.islink(os.path.join(base, d)) and d != "Macintosh HD"]
         except OSError:
             return []
     import ctypes

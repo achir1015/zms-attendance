@@ -16,6 +16,16 @@ from . import APP_ID, APP_NAME, APP_VERSION, GITHUB_REPO
 NO_WINDOW = 0x08000000 if os.name == "nt" else 0
 
 
+def _ssl_ctx():
+    """HTTPS 憑證：macOS 打包版的 Python 找不到系統憑證，改用 certifi 的憑證清單。"""
+    import ssl
+    try:
+        import certifi
+        return ssl.create_default_context(cafile=certifi.where())
+    except Exception:
+        return ssl.create_default_context()
+
+
 # ================================================================ 版本更新（GitHub Releases）
 def _ver(s):
     out = []
@@ -63,7 +73,7 @@ def _latest_via_page(timeout, platform=None):
     """GitHub API 有匿名次數限制（每小時 60 次／每個網路）；改從發佈頁的轉址取得最新版號（無次數限制）。"""
     req = urllib.request.Request("https://github.com/%s/releases/latest" % GITHUB_REPO, method="HEAD",
                                  headers={"User-Agent": APP_ID})
-    with urllib.request.urlopen(req, timeout=timeout) as r:
+    with urllib.request.urlopen(req, timeout=timeout, context=_ssl_ctx()) as r:
         final = r.geturl()                       # …/releases/tag/v1.2.3
     tag = final.rstrip("/").rsplit("/", 1)[-1]
     if "/tag/" not in final or not tag:
@@ -82,7 +92,7 @@ def check_update(timeout=8, platform=None):
     req = urllib.request.Request("https://api.github.com/repos/%s/releases/latest" % GITHUB_REPO,
                                  headers={"Accept": "application/vnd.github+json", "User-Agent": APP_ID})
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as r:
+        with urllib.request.urlopen(req, timeout=timeout, context=_ssl_ctx()) as r:
             rel = json.loads(r.read().decode("utf-8"))
     except urllib.error.HTTPError as e:
         if e.code not in (403, 429):
@@ -104,7 +114,7 @@ def download(url, progress=None):
     os.makedirs(d, exist_ok=True)
     path = os.path.join(d, url.rsplit("/", 1)[-1])
     req = urllib.request.Request(url, headers={"User-Agent": APP_ID})
-    with urllib.request.urlopen(req, timeout=30) as r, open(path, "wb") as f:
+    with urllib.request.urlopen(req, timeout=30, context=_ssl_ctx()) as r, open(path, "wb") as f:
         total = int(r.headers.get("Content-Length") or 0)
         got = 0
         while True:
