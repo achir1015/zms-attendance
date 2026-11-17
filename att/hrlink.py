@@ -78,6 +78,8 @@ class AppSettings:
         return s
 
     def save(self):
+        if os.environ.get("ATT_WEB_CHILD"):      # 線上版子程序：設定一律由公司電腦的桌面版寫入
+            return
         with open(self.file(), "w", encoding="utf-8") as f:
             json.dump({k: getattr(self, k) for k in self.FIELDS}, f, ensure_ascii=False, indent=2)
 

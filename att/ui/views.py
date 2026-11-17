@@ -64,7 +64,7 @@ class Home(ft.Column):
             steps.append((I.DEVICES, "sky", "新增考勤機", "填上機號與放置地點", "devices"))
         if no_enroll:
             steps.append((I.AUTO_FIX_HIGH, "violet", "編機器工號", "還有 %d 位員工沒有機器工號" % no_enroll, "employees"))
-        steps.append((I.USB, "amber", "U 盤匯入打卡", "最後匯入：%s" % (ts_show(last) if last else "還沒有匯入過"), "usb"))
+        steps.append((I.USB, "amber", "上傳打卡檔" if ctx.web else "U 盤匯入打卡", "最後匯入：%s" % (ts_show(last) if last else "還沒有匯入過"), "usb"))
         steps.append((I.RECORD_VOICE_OVER, "rose", "語音教學", "第一次使用請先聽一遍", "help"))
         todo = ft.Column([ft.Container(ft.Row([T.icon_tile(ic, tone, 44), ft.Column([
             ft.Text(t, size=15, weight=ft.FontWeight.W_700, color=T.TEXT), T.muted(sub, 12)], spacing=0, expand=True),
@@ -76,7 +76,7 @@ class Home(ft.Column):
         g.set_rows([dict(r, at_s=ts_show(r["at"]), kind_s=KIND.get(r["kind"], r["kind"])) for r in c.imports(8)])
         super().__init__([
             T.page_header(I.DASHBOARD_ROUNDED, "首頁", "考勤機的員工、卡號與打卡紀錄，和人事薪資差勤系統同步",
-                          actions=[T.btn("U 盤匯入", I.USB, lambda e: go("usb")), help_button(ctx, "intro")]),
+                          actions=[T.btn("上傳打卡檔" if ctx.web else "U 盤匯入", I.USB, lambda e: go("usb")), help_button(ctx, "intro")]),
             kpis,
             ft.Row([T.card(ft.Column([T.title_text("接下來要做", 17), todo], spacing=10), expand=2),
                     T.card(ft.Column([T.title_text("最近的匯入", 17), g], spacing=10), expand=3)],
@@ -97,11 +97,14 @@ class UsbImport(ft.Column):
         self.dev = T.dropdown("考勤機", [("", "依檔名機號自動判斷")] + [(d["id"], "%s（機號 %d）" % (d["name"], d["machine_no"]))
                                                                for d in devs], value="", width=320, filterable=False)
         self.drives = T.muted("")
+        web = ctx.web
         super().__init__([
-            T.page_header(I.USB, "U 盤匯入（實體隨身碟）", "用一般隨身碟從考勤機帶回打卡檔時使用；用虛擬 U 盤時檔案會自動傳回，請看「虛擬 U 盤」頁", "amber",
-                          actions=[T.btn("重新尋找 U 盤", I.REFRESH, lambda e: self.scan(), kind="outline"),
-                                   T.btn("選擇檔案", I.FOLDER_OPEN, self.pick, kind="outline"),
-                                   help_button(ctx, "usb")]),
+            T.page_header(I.USB, "上傳打卡檔" if web else "U 盤匯入（實體隨身碟）",
+                          "把考勤機匯出的 AGL_001.TXT／GLG_001.TXT 從這台裝置上傳匯入；用虛擬 U 盤時檔案會自動傳回" if web else
+                          "用一般隨身碟從考勤機帶回打卡檔時使用；用虛擬 U 盤時檔案會自動傳回，請看「虛擬 U 盤」頁", "amber",
+                          actions=([] if web else [T.btn("重新尋找 U 盤", I.REFRESH, lambda e: self.scan(), kind="outline")]) +
+                          [T.btn("選擇檔案", I.FOLDER_OPEN, self.pick, kind="accent" if web else "outline"),
+                           help_button(ctx, "usb")]),
             T.card(ft.Column([ft.Row([T.title_text("找到的打卡檔", 17), self.drives], spacing=12), self.files,
                               ft.Row([self.dev, T.btn("匯入勾選的檔案", I.DOWNLOAD_DONE, self.run, kind="accent")],
                                      spacing=12)], spacing=12)),
@@ -109,6 +112,12 @@ class UsbImport(ft.Column):
         self.scan(update=False)
 
     def scan(self, update=True):
+        if self.ctx.web:                      # 線上版：不掃公司電腦的磁碟，只用上傳的檔案
+            self.drives.value = "從這台裝置選擇檔案上傳"
+            self.set_files([])
+            if update:
+                self.update()
+            return
         drives = usbfmt.removable_drives()
         if self.ctx.app.app_st.usb_dir and os.path.isdir(self.ctx.app.app_st.usb_dir):
             drives.append(self.ctx.app.app_st.usb_dir)
@@ -134,10 +143,12 @@ class UsbImport(ft.Column):
             new = os.path.basename(p).upper().startswith("GLG")
             rows.append(ft.Container(ft.Row([cb, T.icon_tile(I.DESCRIPTION, "amber" if new else "sky", 36),
                                              ft.Column([ft.Text(os.path.basename(p), size=14, weight=ft.FontWeight.W_600),
-                                                        T.muted("%s　%s　%s" % (p, size, mt), 11)], spacing=0, expand=True),
+                                                        T.muted("%s　%s　%s" % ("已上傳" if self.ctx.web else p, size, mt), 11)], spacing=0, expand=True),
                                              T.chip("新紀錄" if new else "紀錄檔", "amber" if new else "sky")]),
                                      padding=8, border_radius=10, border=ft.Border.all(1, T.LINE)))
         self.files.controls = rows or [ft.Column([
+            T.empty_state(I.UPLOAD_FILE, "按右上角「選擇檔案」上傳打卡檔",
+                          "選考勤機匯出的 AGL_001.TXT／GLG_001.TXT，可一次選多個") if self.ctx.web else
             T.empty_state(I.USB_OFF, "這台電腦上沒有找到打卡檔",
                           "實體隨身碟請插到這台電腦，或按「選擇檔案」選 GLG_001.TXT／AGL_001.TXT"),
             ft.Row([T.btn("用虛擬 U 盤？到「虛擬 U 盤」頁看自動傳回的檔案", I.WIFI_TETHERING,
@@ -145,10 +156,9 @@ class UsbImport(ft.Column):
             horizontal_alignment=ft.CrossAxisAlignment.CENTER)]
 
     async def pick(self, e):
-        fs = await ft.FilePicker().pick_files(dialog_title="選擇打卡紀錄檔", allow_multiple=True,
-                                              allowed_extensions=["txt", "TXT", "csv", "xlsx"])
+        fs = await self.ctx.pick_local("選擇打卡紀錄檔", ["txt", "TXT", "csv", "xlsx"], multiple=True)
         if fs:
-            self.set_files([f.path for f in fs if f.path])
+            self.set_files([p for _n, p in fs])
             self.update()
 
     def run(self, e):
@@ -172,7 +182,8 @@ class UsbImport(ft.Column):
                 T.chip("重複略過 %d" % (r["total"] - r["added"]), "sky"),
                 T.chip("對不到員工 %d" % r["unmatched"], "rose" if r["unmatched"] else "slate"),
                 ft.IconButton(I.ARCHIVE, tooltip="已存查：%s" % r["archive"],
-                              on_click=lambda e, a=r["archive"]: T.open_file(os.path.dirname(a)))], spacing=10)))
+                              on_click=lambda e, a=r["archive"]: self.ctx.page.run_task(self.ctx.show_file, a))],
+                       spacing=10)))
         self.result.controls = [T.title_text("匯入結果", 17)] + cards
         if any(c for c in cards):
             self.ctx.toast("匯入完成")
@@ -276,12 +287,12 @@ class Employees(ft.Column):
             icon=I.TABLE_VIEW, tone="amber")
 
     async def import_sheet(self, e):
-        fs = await ft.FilePicker().pick_files(dialog_title="選擇考勤機匯出的人員資訊表（人員資訊表.xls）",
-                                              allowed_extensions=["xls", "xlsx"])
-        if not fs or not fs[0].path:
+        fs = await self.ctx.pick_local("選擇考勤機匯出的人員資訊表（人員資訊表.xls）", ["xls", "xlsx"])
+        if not fs:
             return
+        fname, fpath = fs[0]
         try:
-            people = usbfmt.read_user_sheet(fs[0].path)
+            people = usbfmt.read_user_sheet(fpath)
         except Exception as ex:
             self.ctx.toast("讀不懂這個檔案：%s" % ex, True)
             return
@@ -293,7 +304,7 @@ class Employees(ft.Column):
                           disabled=not missing)
 
         def go(e):
-            r = self.ctx.guard(c.sync_from_device_sheet, people, bool(create.value), fs[0].name)
+            r = self.ctx.guard(c.sync_from_device_sheet, people, bool(create.value), fname)
             if r:
                 self.ctx.close()
                 self.load()
@@ -364,21 +375,21 @@ class Imports(ft.Column):
                     ("arc_s", "存查", "s", 60)], empty="還沒有匯入紀錄", on_pick=self.open_archive)
         g.set_rows([dict(r, at_s=ts_show(r["at"]), kind_s=KIND.get(r["kind"], r["kind"]),
                          arc_s="📁 開啟" if r.get("archive") else "") for r in ctx.core.imports()])
-        super().__init__([T.page_header(I.HISTORY, "匯入紀錄", "每一次 U 盤匯入、人員資訊表與 U600 搬移；點一列可開啟存查的原始檔",
-                                        "slate", actions=[T.btn("存查資料夾", I.FOLDER_OPEN, self.open_root, kind="outline"),
-                                                          ctx.export_button(g, "匯入紀錄")]), g],
+        super().__init__([T.page_header(I.HISTORY, "匯入紀錄", "每一次 U 盤匯入、人員資訊表與 U600 搬移；點一列可開啟（線上版為下載）存查的原始檔",
+                                        "slate", actions=([] if ctx.web else [T.btn("存查資料夾", I.FOLDER_OPEN, self.open_root, kind="outline")])
+                                        + [ctx.export_button(g, "匯入紀錄")]), g],
                          spacing=14, expand=True)
 
     def open_archive(self, r):
         a = r.get("archive")
         if a and os.path.isfile(a):
-            T.open_file(os.path.dirname(a))
+            self.ctx.page.run_task(self.ctx.show_file, a)      # 線上版：下載存查的原始檔
         else:
             self.ctx.toast("這筆沒有存查檔，或檔案已被移走", True)
 
     def open_root(self, e):
         os.makedirs(self.ctx.core.archive_root, exist_ok=True)
-        T.open_file(self.ctx.core.archive_root)
+        self.ctx.page.run_task(self.ctx.show_file, self.ctx.core.archive_root)
 
 
 # ==================================================================== 考勤機
@@ -518,7 +529,7 @@ class Help(ft.Row):
 
     def show(self, key, update=True, autoplay=False):
         self.token += 1
-        speaker.stop()
+        self.ctx.stop_voice()
         self.sec = key
         g = BY_KEY[key]
         self.toc.controls = [ft.Container(ft.Row([
@@ -576,7 +587,7 @@ class Help(ft.Row):
         g = BY_KEY[self.sec]
         self.token += 1
         token = self.token
-        speaker.say_help(self.sec, g["voice"])
+        self.ctx.say_help(self.sec, g["voice"])
         # 依旁白長度平均分配每個步驟的亮燈時間：有預錄 MP3（48kbps）就用實際長度，否則約每秒 4.2 個字
         from ..voice import help_mp3
         mp3 = help_mp3(self.sec)
@@ -606,7 +617,7 @@ class Help(ft.Row):
 
     def stop(self):
         self.token += 1
-        speaker.stop()
+        self.ctx.stop_voice()
         self._light(-1)
         self.update()
 
@@ -631,10 +642,83 @@ class System(ft.Column):
                              [ft.Row([T.btn("建立桌面捷徑", I.SHORTCUT, self.shortcut, kind="outline"),
                                       T.btn("開啟資料夾", I.FOLDER_OPEN, lambda e: T.open_file(data_dir()),
                                             kind="outline")], spacing=10)], spacing=10)),
+            self.web_card(),
             T.card(ft.Column([T.title_text("版本更新", 17), self.status, self.bar,
                               ft.Row([T.btn("檢查更新", I.REFRESH, lambda e: self.check(), kind="outline")])],
                              spacing=10))], spacing=18, scroll=ft.ScrollMode.AUTO, expand=True)
         self.show_info(info)
+
+    # ---------------------------------------------------------------- 線上版（網頁服務）
+    def web_card(self):
+        from .. import webserve
+        ex = self.ctx.app.app_st.extra
+        can = self.ctx.core.can("ATT", 2)
+        self.web_switch = T.switch("開啟線上版（同一個網路的電腦、手機、平板用瀏覽器登入使用）", bool(ex.get("web_enabled")),
+                                   on_change=self.toggle_web, disabled=not can)
+        self.web_port = T.field("埠", str(ex.get("web_port") or webserve.DEFAULT_PORT), width=110,
+                                keyboard_type=ft.KeyboardType.NUMBER, disabled=not can)
+        self.web_box = ft.Column(spacing=10)
+        self.render_web()
+        return T.card(ft.Column([T.title_text("線上版", 17), ft.Row([self.web_switch, self.web_port], spacing=16,
+                                                                   wrap=True), self.web_box], spacing=10))
+
+    def render_web(self):
+        srv = self.ctx.app.web
+        if srv and srv.running:
+            from ..webserve import qr_png
+            urls = srv.urls() or ["http://localhost:%d/" % srv.port]
+            rows = []
+            for u in urls:
+                try:
+                    qr = ft.Image(src=qr_png(u), width=132, height=132)
+                except Exception:
+                    qr = ft.Container()
+                rows.append(ft.Row([qr, ft.Column([ft.Text(u, size=18, weight=ft.FontWeight.W_700, color=T.PRIMARY,
+                                                           selectable=True),
+                                                   ft.Row([T.btn("用瀏覽器開啟", I.OPEN_IN_BROWSER,
+                                                                 lambda e, x=u: self.ctx.page.launch_url(x), kind="outline")])],
+                                                  spacing=6)], spacing=16))
+            self.web_box.controls = [T.chip("服務執行中", "green", I.LANGUAGE)] + rows + [
+                T.muted("手機掃 QR Code，或在瀏覽器輸入網址，用人事系統的帳號登入（需要出勤管理權限）。"
+                        "線上版和這裡用同一份資料；關閉這個程式時線上版也會一起停止。", 12),
+                T.muted("第一次開啟時，若 Windows 防火牆／macOS 詢問是否允許連入，請按允許（私人網路）。"
+                        "線上版不提供：U600 搬移、系統與更新、虛擬 U 盤接收服務的開關。", 12)]
+        else:
+            self.web_box.controls = [T.muted("未開啟。打開開關後，這台電腦會提供網頁版給同一個網路的裝置使用。", 13)]
+
+    def toggle_web(self, e):
+        app = self.ctx.app
+        ex = app.app_st.extra
+        on = bool(self.web_switch.value)
+        if on:
+            try:
+                port = int(self.web_port.value or 0)
+                assert 1024 <= port <= 65535
+            except Exception:
+                self.web_switch.value = False
+                self.ctx.toast("埠請填 1024～65535 的數字", True)
+                self.update()
+                return
+            ex["web_port"] = port
+            app.stop_web()
+            self.web_box.controls = [ft.Row([ft.ProgressRing(width=20, height=20), ft.Text("正在啟動線上版…")])]
+            self.update()
+            try:
+                app.start_web()
+            except Exception as ex2:
+                self.web_switch.value = False
+                ex["web_enabled"] = False
+                app.app_st.save()
+                self.render_web()
+                self.ctx.toast("線上版無法啟動：%s" % ex2, True)
+                self.update()
+                return
+        else:
+            app.stop_web()
+        ex["web_enabled"] = on
+        app.app_st.save()
+        self.render_web()
+        self.update()
 
     def show_info(self, info):
         if info:

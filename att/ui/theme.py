@@ -401,6 +401,68 @@ class Ctx:
         self.app = app
         self.page = app.page
         self.core = getattr(app, 'core', None)
+        self.web = bool(getattr(app.page, "web", False))    # 線上版（瀏覽器）：檔案改上傳／下載、語音在瀏覽器播放
+        self._audio = None
+
+    # ---------------------------------------------------------- 語音（線上版在瀏覽器播放，各分頁各自一個播放器）
+    def say_help(self, key, text):
+        from ..voice import help_mp3, speaker
+        if not self.web:
+            speaker.say_help(key, text)
+            return
+        self.stop_voice()
+        if not help_mp3(key):
+            self.toast("線上版只播放預錄的教學語音", True)
+            return
+        import flet_audio as fa
+        self._audio = fa.Audio(src="voice/%s.mp3" % key, autoplay=True)
+        self.page.services.append(self._audio)
+        self.page.update()
+
+    def stop_voice(self):
+        from ..voice import speaker
+        if not self.web:
+            speaker.stop()
+            return
+        a, self._audio = self._audio, None
+        if a is not None:
+            try:
+                self.page.services.remove(a)
+                self.page.update()
+            except Exception:
+                pass
+
+    # ---------------------------------------------------------- 檔案（線上版：從瀏覽器上傳、下載到瀏覽器）
+    async def pick_local(self, title, exts, multiple=False):
+        """選檔案，回傳 [(檔名, 本機路徑)]；線上版／手機把上傳的內容存成暫存檔。"""
+        import tempfile
+        files = await ft.FilePicker().pick_files(dialog_title=title, allowed_extensions=exts, allow_multiple=multiple,
+                                                 with_data=MOBILE or self.web)
+        out = []
+        for f in files or []:
+            if f.path and os.path.isfile(f.path) and not self.web:
+                out.append((f.name or os.path.basename(f.path), f.path))
+            elif f.bytes:
+                d = tempfile.mkdtemp(prefix="att_up_")
+                p = os.path.join(d, os.path.basename(f.name or "upload"))
+                with open(p, "wb") as fh:
+                    fh.write(f.bytes)
+                out.append((os.path.basename(p), p))
+        return out
+
+    async def show_file(self, path):
+        """電腦版：開啟所在資料夾；線上版：把檔案下載到瀏覽器。"""
+        if not path or not os.path.exists(path):
+            self.toast("找不到檔案，可能已被移走", True)
+            return
+        if self.web or MOBILE:
+            if os.path.isdir(path):
+                self.toast("線上版不能開啟電腦上的資料夾，請在公司電腦查看", True)
+                return
+            with open(path, "rb") as f:
+                await self.save_bytes(os.path.basename(path), f.read())
+            return
+        open_file(path if os.path.isdir(path) else os.path.dirname(path))
 
     def toast(self, msg, error=False):
         self.page.show_dialog(ft.SnackBar(
@@ -466,14 +528,14 @@ class Ctx:
         return path
 
     async def save_generated(self, filename, writer, open_after=True):
-        """產生檔案（writer(path) 負責寫入）：電腦版另存後開啟；手機版存到手機。"""
-        if MOBILE:
+        """產生檔案（writer(path) 負責寫入）：電腦版另存後開啟；手機版存到手機；線上版下載到瀏覽器。"""
+        if MOBILE or self.web:
             import tempfile
-            p = os.path.join(tempfile.gettempdir(), filename)
+            p = os.path.join(tempfile.mkdtemp(prefix="att_dl_"), filename)
             writer(p)
             with open(p, "rb") as f:
                 await self.save_bytes(filename, f.read())
-            return
+            return filename
         path = await self.save_as(filename, filename.rsplit(".", 1)[-1])
         if path:
             writer(path)
@@ -510,7 +572,7 @@ class Ctx:
             if not grid.data_rows:
                 self.toast("沒有資料可以匯出", True)
                 return
-            if MOBILE:
+            if MOBILE or self.web:
                 await self.save_bytes("%s_%s.csv" % (name, rocdate.today().strftime("%Y%m%d")),
                                       grid.csv_text().encode("utf-8-sig"))
                 return

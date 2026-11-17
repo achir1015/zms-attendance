@@ -1,6 +1,7 @@
 """資料助秘刷卡考勤系統 — 程式進入點。
 
 桌面版：python main.py
+網頁模式（線上版子程序，或開發預覽 run_web.py）：設定 ATT_WEB_PORT（與 ATT_WEB_HOST）
 """
 import os
 import sys
@@ -20,6 +21,6 @@ if __name__ == "__main__":
     assets = os.path.join(resource_dir(), "assets")
     port = os.environ.get("ATT_WEB_PORT")
     if port:
-        ft.run(main, view=None, port=int(port), host="127.0.0.1", assets_dir=assets)
+        ft.run(main, view=None, port=int(port), host=os.environ.get("ATT_WEB_HOST", "127.0.0.1"), assets_dir=assets)
     else:
         ft.run(main, assets_dir=assets)

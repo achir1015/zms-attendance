@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>資料助秘刷卡考勤系統</title>
+<meta name="description" content="大當家 BS-690FCW 考勤機管理系統：取代 U600，與資料助秘人事薪資差勤共用資料庫；ESP32-S3 虛擬 U 盤免插拔。示範版：語音教學與範例畫面。">
+<link rel="icon" href="icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;800&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,500,0,0&display=block">
+<style>
+:root{
+  --bg:#F2F5FA;--card:#fff;--ink:#1F2937;--muted:#64748B;--line:#E2E8F0;--primary:#1E4D8C;--navy:#13294B;
+  --teal:#0FA294;--gold:#E0A526;--soft:#F7F9FC;--hl:#FFF8E6;
+  --t-blue:#E3EDFB;--f-blue:#1E4D8C;--t-teal:#DDF5F1;--f-teal:#0F766E;--t-amber:#FDF1D8;--f-amber:#B45309;
+  --t-violet:#EDE7FB;--f-violet:#6D28D9;--t-green:#DCF5E6;--f-green:#15803D;--t-rose:#FCE4E8;--f-rose:#BE123C;
+  --t-slate:#E7ECF2;--f-slate:#475569;--t-sky:#DDF0FB;--f-sky:#0369A1;--t-orange:#FDE9DA;--f-orange:#C2410C;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0F172A;--card:#162033;--ink:#E5E7EB;--muted:#94A3B8;--line:#26324A;--primary:#7FB0F0;--soft:#1B2740;--hl:#3A2F12;
+  --t-blue:#1C2D4A;--t-teal:#123532;--t-amber:#3A2E14;--t-violet:#2A2145;--t-green:#14321F;--t-rose:#3B1A23;--t-slate:#222C3D;--t-sky:#13304A;--t-orange:#3A2414;
+  --f-blue:#9CC2F5;--f-teal:#5EE0CF;--f-amber:#F5C66B;--f-violet:#C4B0FA;--f-green:#7EE0A2;--f-rose:#F7A0B2;--f-slate:#B8C4D4;--f-sky:#8BCFF5;--f-orange:#F7B184;}}
+:root[data-theme="dark"]{
+  --bg:#0F172A;--card:#162033;--ink:#E5E7EB;--muted:#94A3B8;--line:#26324A;--primary:#7FB0F0;--soft:#1B2740;--hl:#3A2F12;
+  --t-blue:#1C2D4A;--t-teal:#123532;--t-amber:#3A2E14;--t-violet:#2A2145;--t-green:#14321F;--t-rose:#3B1A23;--t-slate:#222C3D;--t-sky:#13304A;--t-orange:#3A2414;
+  --f-blue:#9CC2F5;--f-teal:#5EE0CF;--f-amber:#F5C66B;--f-violet:#C4B0FA;--f-green:#7EE0A2;--f-rose:#F7A0B2;--f-slate:#B8C4D4;--f-sky:#8BCFF5;--f-orange:#F7B184;}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);font-family:"Noto Sans TC",system-ui,sans-serif;line-height:1.65}
+a{color:var(--primary)}
+.ms{font-family:"Material Symbols Rounded";font-weight:normal;font-style:normal;font-size:24px;line-height:1;
+  display:inline-block;white-space:nowrap;-webkit-font-feature-settings:"liga";font-feature-settings:"liga";-webkit-font-smoothing:antialiased}
+.wrap{max-width:1180px;margin:0 auto;padding:0 16px}
+header.hero{background:linear-gradient(135deg,#13294B,#1E4D8C 55%,#0F766E);color:#fff;padding:44px 0 36px}
+.hero .top{display:flex;gap:18px;align-items:center}
+.hero img{width:84px;height:84px;border-radius:22px;background:#fff1;flex:none}
+.hero h1{margin:0;font-size:clamp(26px,4vw,38px);font-weight:800;letter-spacing:.5px}
+.hero p{margin:6px 0 0;color:#C8D7EE}
+.hero .lead{font-size:18px;margin-top:22px;color:#fff;max-width:820px}
+.btns{display:flex;flex-wrap:wrap;gap:10px;margin-top:20px}
+.btn{display:inline-flex;align-items:center;gap:8px;padding:10px 16px;border-radius:12px;font-weight:700;text-decoration:none;
+  border:1px solid transparent;cursor:pointer;font-size:15px;font-family:inherit}
+.btn.gold{background:var(--gold);color:#3B2600}
+.btn.ghost{background:#ffffff1f;color:#fff;border-color:#ffffff40}
+.btn.pri{background:var(--primary);color:#fff}
+:root[data-theme="dark"] .btn.pri{color:#0F172A}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .btn.pri{color:#0F172A}}
+.btn.out{background:transparent;color:var(--primary);border-color:var(--line)}
+.btn:disabled{opacity:.45;cursor:default}
+section{padding:34px 0 8px}
+h2{font-size:24px;margin:0 0 6px;font-weight:800}
+.sub{color:var(--muted);margin:0 0 18px}
+.grid{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(250px,1fr))}
+.card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:18px}
+.feat{display:flex;gap:12px;align-items:flex-start}
+.tile{width:46px;height:46px;border-radius:14px;display:flex;align-items:center;justify-content:center;flex:none}
+.feat b{display:block;font-size:16px}
+.feat span{color:var(--muted);font-size:14px}
+.tone-blue{background:var(--t-blue);color:var(--f-blue)}.tone-teal{background:var(--t-teal);color:var(--f-teal)}
+.tone-amber{background:var(--t-amber);color:var(--f-amber)}.tone-violet{background:var(--t-violet);color:var(--f-violet)}
+.tone-green{background:var(--t-green);color:var(--f-green)}.tone-rose{background:var(--t-rose);color:var(--f-rose)}
+.tone-slate{background:var(--t-slate);color:var(--f-slate)}.tone-sky{background:var(--t-sky);color:var(--f-sky)}
+.tone-orange{background:var(--t-orange);color:var(--f-orange)}
+/* 語音教學 */
+.lesson{display:grid;grid-template-columns:270px 1fr;gap:16px;align-items:start}
+.toc{display:flex;flex-direction:column;gap:4px;max-height:640px;overflow:auto}
+.toc button{all:unset;display:flex;gap:10px;padding:10px 12px;border-radius:10px;cursor:pointer;font-size:15px}
+.toc button .n{color:var(--muted);width:20px;flex:none}
+.toc button[aria-current="true"]{background:var(--primary);color:#fff;font-weight:700}
+:root[data-theme="dark"] .toc button[aria-current="true"]{color:#0F172A}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .toc button[aria-current="true"]{color:#0F172A}}
+.toc button[aria-current="true"] .n{color:inherit}
+.toc button:focus-visible{outline:2px solid var(--gold)}
+.stage-head{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.stage-head h3{margin:0;font-size:22px;flex:1;min-width:200px}
+.steps{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:18px 0}
+.step{width:132px;padding:12px 8px;border-radius:16px;text-align:center;opacity:.35;transform:scale(.94);
+  transition:opacity .4s,transform .4s,background .4s,border-color .4s;border:2px solid transparent}
+.step .tile{margin:0 auto 8px;width:56px;height:56px;border-radius:16px}
+.step .tile .ms{font-size:28px}
+.step div.t{font-size:13px;font-weight:600}
+.step.on{opacity:1;transform:scale(1)}
+.step.cur{border-color:var(--gold);background:var(--hl);transform:scale(1.05)}
+.arrow{color:var(--muted)}
+.voice{background:var(--soft);border-radius:14px;padding:16px;font-size:15px}
+.figure{margin:14px 0;border:1px solid var(--line);border-radius:14px;overflow:hidden;background:#F2F5FA}
+.figure img{display:block;width:100%;height:auto}
+.prog{height:4px;background:var(--line);border-radius:4px;overflow:hidden;margin-top:10px}
+.prog i{display:block;height:100%;width:0;background:var(--gold);transition:width .2s linear}
+/* 範例畫面 */
+.shots{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(320px,1fr))}
+.shot{margin:0}
+.shot img{width:100%;height:auto;border-radius:14px;border:1px solid var(--line);display:block;cursor:zoom-in}
+.shot figcaption{font-size:14px;color:var(--muted);margin-top:6px}
+.zoom{position:fixed;inset:0;background:#000c;display:none;align-items:center;justify-content:center;padding:16px;z-index:9}
+.zoom.show{display:flex}
+.zoom img{max-width:100%;max-height:100%;border-radius:10px}
+table{border-collapse:collapse;width:100%;font-size:15px}
+td,th{border-bottom:1px solid var(--line);padding:10px 8px;text-align:left;vertical-align:top}
+th{color:var(--muted);font-weight:600;white-space:nowrap}
+.note{font-size:14px;color:var(--muted)}
+footer{padding:30px 0 40px;color:var(--muted);font-size:14px}
+.theme-toggle{position:absolute;top:14px;right:16px}
+@media (max-width:820px){
+  .lesson{grid-template-columns:1fr}
+  .toc{flex-direction:row;overflow-x:auto;max-height:none}
+  .toc button{white-space:nowrap}
+  .step{width:calc(50% - 30px)}
+  .arrow{display:none}
+}
+</style>
+</head>
+<body>
+<header class="hero" style="position:relative">
+  <button class="btn ghost theme-toggle" id="themeBtn" aria-label="切換深色／淺色"><span class="ms">contrast</span></button>
+  <div class="wrap">
+    <div class="top">
+      <img src="icon.png" alt="">
+      <div><h1>資料助秘刷卡考勤系統</h1><p>大當家 BS-690FCW 考勤機 · 取代 U600 · 與人事薪資差勤共用資料庫</p></div>
+    </div>
+    <p class="lead">員工直接用人事系統的員工；考勤機的打卡經 <b>ESP32-S3 虛擬 U 盤</b> 自動傳回、依班表分上下班寫進人事打卡；
+      人事系統的員工一鍵送到考勤機。這裡是<b>示範版</b>：可以聽語音教學、看範例畫面（虛構資料）。</p>
+    <div class="btns">
+      <a class="btn gold" href="https://github.com/achir1015/zms-attendance/releases/latest"><span class="ms">download</span>下載 Windows／macOS 版</a>
+      <a class="btn ghost" href="#lessons"><span class="ms">record_voice_over</span>語音教學</a>
+      <a class="btn ghost" href="#online"><span class="ms">language</span>公司內的線上版</a>
+      <a class="btn ghost" href="https://github.com/achir1015/zms-attendance"><span class="ms">code</span>GitHub</a>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+  <section>
+    <h2>主要功能</h2>
+    <div class="grid">
+      <div class="card feat"><div class="tile tone-amber"><span class="ms">wifi_tethering</span></div><div><b>虛擬 U 盤（免插拔）</b><span>ESP32-S3 一直插在考勤機，打卡檔經 Wi-Fi 自動傳回、匯入並存查</span></div></div>
+      <div class="card feat"><div class="tile tone-teal"><span class="ms">send_to_mobile</span></div><div><b>上傳到刷卡機</b><span>六步驟把人事系統員工送到考勤機，並確認誰已在機器上</span></div></div>
+      <div class="card feat"><div class="tile tone-blue"><span class="ms">fingerprint</span></div><div><b>自動分上下班</b><span>依人事班表判斷（含跨夜班），寫進人事打卡，出勤與薪資直接用</span></div></div>
+      <div class="card feat"><div class="tile tone-slate"><span class="ms">inventory_2</span></div><div><b>不重複、可存查</b><span>同一檔案只匯入一次，原始檔與送出的人員資訊表都原封不動保存</span></div></div>
+      <div class="card feat"><div class="tile tone-violet"><span class="ms">credit_card</span></div><div><b>員工與卡號</b><span>悠遊卡、一卡通等 IC 卡；讀入考勤機的人員資訊表直接建立員工</span></div></div>
+      <div class="card feat"><div class="tile tone-orange"><span class="ms">move_down</span></div><div><b>U600 搬移</b><span>一次搬來部門、員工、卡號與舊打卡（只讀，不改 U600）</span></div></div>
+    </div>
+  </section>
+
+  <section id="lessons">
+    <h2>語音動態教學</h2>
+    <p class="sub">與程式內相同的 11 課臺灣華語語音；按「播放」後，步驟會跟著旁白依序亮起。</p>
+    <div class="lesson">
+      <nav class="card toc" id="toc" aria-label="教學目錄"></nav>
+      <div class="card" id="stage" aria-live="polite">
+        <div class="stage-head">
+          <div class="tile tone-rose"><span class="ms">record_voice_over</span></div>
+          <div style="flex:1;min-width:200px"><div class="note" id="lno"></div><h3 id="ltitle"></h3></div>
+          <button class="btn pri" id="play"><span class="ms">play_circle</span>播放語音教學</button>
+          <button class="btn out" id="stop"><span class="ms">stop_circle</span>停止</button>
+        </div>
+        <div class="prog"><i id="bar"></i></div>
+        <div class="steps" id="steps"></div>
+        <div class="figure" id="fig" hidden><img id="figimg" alt=""></div>
+        <div class="voice" id="vtext"></div>
+        <div class="btns"><button class="btn out" id="prev"><span class="ms">chevron_left</span>上一課</button>
+          <button class="btn pri" id="next">下一課<span class="ms">chevron_right</span></button></div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>範例畫面</h2>
+    <p class="sub">人事系統範例公司「祥和貿易」的虛構資料。點圖片放大。</p>
+    <div class="shots">
+      <figure class="shot"><img src="screens/home.png" alt="首頁"><figcaption>首頁：員工、卡號、今日打卡與對不到員工的紀錄</figcaption></figure>
+      <figure class="shot"><img src="screens/todevice.png" alt="上傳到刷卡機"><figcaption>上傳到刷卡機：六個步驟與完成狀態</figcaption></figure>
+      <figure class="shot"><img src="screens/records.png" alt="打卡紀錄"><figcaption>打卡紀錄：人臉／指紋／卡，系統判斷上下班</figcaption></figure>
+      <figure class="shot"><img src="screens/employees.png" alt="員工與卡號"><figcaption>員工與卡號：機器工號、感應卡、人臉指紋登錄</figcaption></figure>
+      <figure class="shot"><img src="screens/help.png" alt="語音教學"><figcaption>程式內的語音教學（附 ESP32-S3 雙接頭示意圖）</figcaption></figure>
+      <figure class="shot"><img src="screens/login.png" alt="登入"><figcaption>用人事薪資差勤系統的帳號登入</figcaption></figure>
+    </div>
+  </section>
+
+  <section id="online">
+    <h2>公司內的線上版</h2>
+    <p class="sub">考勤資料存在公司電腦（人事系統的 MariaDB），所以真正的線上版由公司電腦提供。</p>
+    <div class="card">
+      <table>
+        <tr><th>開啟</th><td>公司電腦的考勤系統 →「系統與更新」→ 打開「線上版」。畫面會顯示網址與 QR Code（預設埠 8597）。</td></tr>
+        <tr><th>使用</th><td>同一個網路的電腦、平板用瀏覽器開網址，用人事系統的帳號登入（需要出勤管理權限）。畫面與桌面版相同、資料即時。</td></tr>
+        <tr><th>檔案</th><td>打卡檔從瀏覽器上傳匯入；匯出 Excel、人員資訊表、存查原始檔會下載到瀏覽器。語音教學在瀏覽器播放。</td></tr>
+        <tr><th>不提供</th><td>U600 搬移、系統與更新、虛擬 U 盤接收服務的開關與配對碼（只在公司電腦操作）。</td></tr>
+        <tr><th>停止</th><td>關閉公司電腦上的考勤系統，線上版會一起停止。</td></tr>
+      </table>
+      <p class="note">手機版面會在 iPhone／Android App 版本提供；目前線上版建議用電腦或平板。</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>下載與安裝</h2>
+    <div class="card">
+      <table>
+        <tr><th>Windows 10／11</th><td><code>ZMSAttendance-Setup-&lt;版本&gt;.exe</code>（SmartScreen 請按「其他資訊」→「仍要執行」）</td></tr>
+        <tr><th>macOS 11 以上</th><td><code>ZMSAttendance-&lt;版本&gt;-mac.dmg</code>（已經 Apple 公證）</td></tr>
+        <tr><th>虛擬 U 盤韌體</th><td><code>vusb_esp32s3-&lt;版本&gt;.bin</code>（第一次燒錄用；之後由系統無線更新）</td></tr>
+      </table>
+      <p class="note">請先安裝 <a href="https://github.com/achir1015/zms-general-hr">資料助秘之一般公司人事薪資差勤</a>。</p>
+      <div class="btns"><a class="btn pri" href="https://github.com/achir1015/zms-attendance/releases/latest"><span class="ms">download</span>前往下載</a></div>
+    </div>
+  </section>
+</main>
+<footer class="wrap">系統開發：吳玉柱 先生 與 Claude AI Opus 5.5 · <span id="ver"></span></footer>
+<div class="zoom" id="zoom" role="dialog" aria-label="放大圖片"><img alt=""></div>
+
+<script>
+(function(){
+  const root = document.documentElement;
+  try { const t = localStorage.getItem("theme"); if (t) root.dataset.theme = t; } catch (e) {}
+  document.getElementById("themeBtn").onclick = () => {
+    const dark = root.dataset.theme ? root.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+    root.dataset.theme = dark ? "light" : "dark";
+    try { localStorage.setItem("theme", root.dataset.theme); } catch (e) {}
+  };
+  const zoom = document.getElementById("zoom");
+  document.querySelectorAll(".shot img").forEach(img => img.onclick = () => { zoom.querySelector("img").src = img.src; zoom.classList.add("show"); });
+  zoom.onclick = () => zoom.classList.remove("show");
+  document.addEventListener("keydown", e => { if (e.key === "Escape") zoom.classList.remove("show"); });
+
+  const $ = id => document.getElementById(id);
+  const audio = new Audio();
+  let lessons = [], idx = 0, timer = null;
+
+  function stop() {
+    audio.pause(); clearInterval(timer); timer = null; $("bar").style.width = "0";
+    document.querySelectorAll(".step").forEach(s => s.classList.remove("on", "cur"));
+  }
+  function light(n) {
+    document.querySelectorAll(".step").forEach((s, i) => { s.classList.toggle("on", i <= n); s.classList.toggle("cur", i === n); });
+  }
+  function show(i, autoplay) {
+    stop(); idx = i; const g = lessons[i];
+    $("lno").textContent = `第 ${i + 1} 課，共 ${lessons.length} 課`;
+    $("ltitle").textContent = g.title;
+    $("vtext").textContent = g.voice;
+    $("steps").innerHTML = g.steps.map((s, k) => (k ? '<span class="ms arrow">arrow_forward</span>' : "") +
+      `<div class="step"><div class="tile tone-${s.tone}"><span class="ms">${s.icon}</span></div><div class="t">${s.text}</div></div>`).join("");
+    $("fig").hidden = !g.image; if (g.image) { $("figimg").src = g.image; $("figimg").alt = g.title; }
+    $("play").disabled = !g.audio; $("prev").disabled = i === 0; $("next").disabled = i === lessons.length - 1;
+    document.querySelectorAll("#toc button").forEach((b, k) => b.setAttribute("aria-current", k === i ? "true" : "false"));
+    const toc = $("toc"), cur = toc.children[i];          // 手機：目錄橫向捲到目前這一課
+    if (cur && toc.scrollWidth > toc.clientWidth) toc.scrollTo({left: cur.offsetLeft - (toc.clientWidth - cur.clientWidth) / 2, behavior: "smooth"});
+    if (autoplay) play();
+  }
+  function play() {
+    const g = lessons[idx]; if (!g.audio) return;
+    stop(); audio.src = g.audio; audio.currentTime = 0;
+    audio.play().catch(() => {});
+    timer = setInterval(() => {
+      if (!audio.duration) return;
+      const p = audio.currentTime / audio.duration;
+      $("bar").style.width = (p * 100).toFixed(1) + "%";
+      light(Math.min(g.steps.length - 1, Math.floor(p * g.steps.length)));
+    }, 200);
+  }
+  audio.onended = () => { clearInterval(timer); timer = null; $("bar").style.width = "100%";
+    document.querySelectorAll(".step").forEach(s => { s.classList.add("on"); s.classList.remove("cur"); }); };
+  $("play").onclick = play; $("stop").onclick = stop;
+  $("prev").onclick = () => show(idx - 1, true); $("next").onclick = () => show(idx + 1, true);
+
+  fetch("lessons.json").then(r => r.json()).then(d => {
+    lessons = d.lessons; $("ver").textContent = "v" + d.version;
+    $("toc").innerHTML = lessons.map((g, i) => `<button type="button"><span class="n">${i + 1}</span><span>${g.title}</span></button>`).join("");
+    document.querySelectorAll("#toc button").forEach((b, i) => b.onclick = () => show(i));
+    const k = lessons.findIndex(g => g.key === (location.hash.slice(1) || "intro"));
+    show(k < 0 ? 0 : k);
+  }).catch(() => { $("vtext").textContent = "教學資料載入失敗，請重新整理。"; });
+})();
+</script>
+</body>
+</html>

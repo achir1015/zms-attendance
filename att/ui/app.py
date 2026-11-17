@@ -28,6 +28,7 @@ MENU = [
     ("help", "語音教學", I.RECORD_VOICE_OVER, "rose"),
     ("system", "系統與更新", I.SYSTEM_UPDATE, "green"),
 ]
+WEB_HIDDEN = {"u600", "system"}       # 線上版（瀏覽器）不提供：U600 搬移、系統與更新（只在公司電腦操作）
 
 
 def _setup_log():
@@ -46,13 +47,15 @@ class App:
         self.current = "home"
         self.update_info = None
         self.vusb = None
+        self.web = None                                   # 線上版網頁服務（桌面版才會開）
+        self.is_web = bool(getattr(page, "web", False))   # 這個畫面是不是開在瀏覽器裡
 
     # ================================================================ 啟動
     def start(self):
         _setup_log()
         p = self.page
         self.sim = os.environ.get("ATT_SIM_LABEL", "").strip()     # 模擬模式（連人事範例資料）
-        p.title = APP_NAME + ("（%s）" % self.sim if self.sim else "")
+        p.title = APP_NAME + ("（%s）" % self.sim if self.sim else "") + ("（線上版）" if self.is_web else "")
         p.fonts = {"NotoSansTC": "fonts/NotoSansTC-VF.ttf"}
         from . import textscale
         textscale.install(p)
@@ -63,6 +66,8 @@ class App:
         p.padding = 0
         p.spacing = 0
         try:
+            if self.is_web:
+                raise RuntimeError("web")
             p.window.width, p.window.height = 1360, 860
             p.window.min_width, p.window.min_height = 1100, 680
             p.window.icon = "icon.ico"
@@ -129,7 +134,7 @@ class App:
         p = self.page
         if not self.db.value("SELECT COUNT(*) FROM users"):
             raise RuntimeError("人事系統還沒有建立帳號，請先開啟人事薪資差勤系統建立系統管理員。")
-        uid = T.field("帳號", self.app_st.last_user, width=320, prefix_icon=I.PERSON_OUTLINE)
+        uid = T.field("帳號", "" if self.is_web else self.app_st.last_user, width=320, prefix_icon=I.PERSON_OUTLINE)
         pw = T.field("密碼", "", width=320, password=True, can_reveal_password=True, prefix_icon=I.LOCK_OUTLINE,
                      autofocus=bool(uid.value))
         msg = ft.Text("", color=T.DANGER, size=13)
@@ -141,8 +146,9 @@ class App:
                 msg.value = str(ex)
                 p.update()
                 return
-            self.app_st.last_user = self.core.uid
-            self.app_st.save()
+            if not self.is_web:            # 線上版不寫設定檔（避免蓋掉公司電腦上較新的設定）
+                self.app_st.last_user = self.core.uid
+                self.app_st.save()
             self.main()
 
         pw.on_submit = go
@@ -187,7 +193,7 @@ class App:
             ft.Container(height=6), uid, pw, msg,
             ft.FilledButton("登入", icon=I.LOGIN, width=320, height=48, on_click=go, bgcolor=T.PRIMARY,
                             style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=12))),
-            T.btn("聽說明", I.VOLUME_UP, lambda e: speaker.say_help("intro", BY_KEY["intro"]["voice"]), kind="ghost"),
+            T.btn("聽說明", I.VOLUME_UP, lambda e: self.ctx.say_help("intro", BY_KEY["intro"]["voice"]), kind="ghost"),
             T.muted("資料庫：人事薪資差勤（%s:%s）" % (self.hr.host, self.hr.port), 11)],
             horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=12, tight=True)
         p.controls.clear()
@@ -223,6 +229,8 @@ class App:
         p.controls.clear()
         p.add(ft.Row([side, self.body], expand=True, spacing=0))
         self.go("home")
+        if self.is_web:                 # 線上版：服務都由公司電腦的桌面版負責
+            return
         p.run_thread(self._check_update)
         if self.app_st.extra.get("vusb_enabled"):
             try:
@@ -230,6 +238,34 @@ class App:
             except Exception as e:
                 log.exception("vusb start")
                 self.ctx.toast("虛擬 U 盤接收服務無法啟動：%s" % e, True)
+        if self.app_st.extra.get("web_enabled"):
+            p.run_thread(self._start_web_quiet)
+
+    # ================================================================ 線上版網頁服務
+    def start_web(self):
+        from .. import webserve
+        if self.web and self.web.running:
+            return self.web
+        port = int(self.app_st.extra.get("web_port") or webserve.DEFAULT_PORT)
+        self.web = webserve.WebService(port, self.hr.hr_dir)
+        try:
+            self.web.start()
+        except Exception:
+            self.web = None
+            raise
+        return self.web
+
+    def _start_web_quiet(self):
+        try:
+            self.start_web()
+        except Exception as e:
+            log.exception("web start")
+            self.ctx.toast("線上版服務無法啟動：%s" % e, True)
+
+    def stop_web(self):
+        if self.web:
+            self.web.stop()
+            self.web = None
 
     # ================================================================ 虛擬 U 盤接收服務
     def start_vusb(self):
@@ -286,6 +322,10 @@ class App:
     def render_sidebar(self):
         items = []
         for sid, title, icon, tone in MENU:
+            if self.is_web and sid in WEB_HIDDEN:
+                continue
+            if self.is_web and sid == "usb":
+                title = "上傳打卡檔"
             sel = sid == self.current
             bg, fg = T.TONES[tone]
             items.append(ft.Container(
@@ -308,7 +348,9 @@ class App:
 
     def go(self, sid, **kw):
         from . import views
-        speaker.stop()
+        self.ctx.stop_voice()
+        if self.is_web and sid in WEB_HIDDEN:
+            sid = "home"
         self.current = sid
         self.render_sidebar()
         try:
@@ -319,8 +361,9 @@ class App:
         self.page.update()
 
     def logout(self):
-        speaker.stop()
+        self.ctx.stop_voice()
         self.stop_vusb()
+        self.stop_web()
         self.core.user = None
         self.login()
 
@@ -334,6 +377,10 @@ class App:
         speaker.stop()
         try:
             self.stop_vusb()
+        except Exception:
+            pass
+        try:
+            self.stop_web()
         except Exception:
             pass
         if self.hr:

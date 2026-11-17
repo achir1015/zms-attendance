@@ -23,7 +23,7 @@ class VirtualUsb(ft.Column):
         st = ctx.app.app_st.extra
         can = ctx.core.can("ATT", 2)
         self.enabled = T.switch("啟用接收服務（讓考勤機上的虛擬 U 盤連進來）", bool(st.get("vusb_enabled")),
-                                on_change=self.toggle, disabled=not can)
+                                on_change=self.toggle, disabled=not can or ctx.web)
         self.svc = ft.Column(spacing=8)
         self.agents_box = ft.Column(spacing=12)
         self.outbox_grid = T.Grid([("created_s", "產生時間", "s", 150), ("name", "檔名", "s", 140),
@@ -73,7 +73,10 @@ class VirtualUsb(ft.Column):
         app = self.ctx.app
         st = app.app_st.extra
         srv = app.vusb
-        if srv and srv.running:
+        if self.ctx.web:
+            self.svc.controls = [T.muted("線上版只能查看狀態與送檔；接收服務的開關與配對碼請在公司電腦的考勤系統設定。"
+                                         "下面的板子卡片顯示的是最新回報。", 13)]
+        elif srv and srv.running:
             ips = vusb.local_ips()
             self.svc.controls = [
                 ft.Row([T.chip("服務執行中", "green", I.WIFI_TETHERING),
