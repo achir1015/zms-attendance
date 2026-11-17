@@ -1,4 +1,7 @@
 # 資料助秘刷卡考勤系統
+<img width="1348" height="856" alt="image" src="https://github.com/user-attachments/assets/000e761c-546d-452b-ad21-dd058760fcb2" />
+<img width="513" height="513" alt="image" src="https://github.com/user-attachments/assets/433aacc4-517b-433a-9141-6395b918f543" />
+<img width="1600" height="900" alt="image" src="https://github.com/user-attachments/assets/c5717838-05a3-4d61-9a42-13c1982fb3ab" />
 
 <img src="assets/icon.png" width="120" align="right" alt="圖示">
 
