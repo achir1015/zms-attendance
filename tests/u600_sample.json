@@ -1,0 +1,24 @@
+{
+  "source": "test",
+  "depart": [
+    {"depart_id": "00000001", "upper_depart_id": "", "depart_name": "IPMOS"},
+    {"depart_id": "00000002", "upper_depart_id": "00000001", "depart_name": "總經理"}
+  ],
+  "employee": [
+    {"emp_id": "10000001", "card_id": "0010000001", "card_sn": "2345678901", "emp_name": "測試甲", "depart_id": "00000002",
+     "sex": 0, "hire_date": "2020-01-01 00:00:00", "end_date": "2099-12-31 00:00:00", "id_card": "", "phone_code": "", "email": "", "no_sign": false},
+    {"emp_id": "10000002", "card_id": "0010000002", "card_sn": "1234567890", "emp_name": "測試乙", "depart_id": "00000002",
+     "sex": 0, "hire_date": "2024-01-09 00:00:00", "end_date": "2099-12-31 00:00:00", "id_card": "", "phone_code": "", "email": "", "no_sign": false}
+  ],
+  "leaved": [],
+  "enroll_dface": [
+    {"EMachineNumber": 1, "EnrollNumber": 10000001, "UserName": "測試甲", "FingerNumber": 11, "Privilege": 0, "Password": "2345678901"},
+    {"EMachineNumber": 1, "EnrollNumber": 10000001, "UserName": "測試甲", "FingerNumber": 50, "Privilege": 0, "Password": ""},
+    {"EMachineNumber": 1, "EnrollNumber": 10000002, "UserName": "測試乙", "FingerNumber": 11, "Privilege": 0, "Password": "1234567890"}
+  ],
+  "records": [
+    {"clock_id": 1, "card_id": "0010000001", "emp_id": "10000001", "KqDate": "2024-01-08 00:00:00", "KqTime": "1899-12-30 11:49:55", "mark": 0, "flag": 0, "sign_cause": ""},
+    {"clock_id": 1, "card_id": "0010000001", "emp_id": "10000001", "KqDate": "2024-01-09 00:00:00", "KqTime": "1899-12-30 02:35:27", "mark": 0, "flag": 0, "sign_cause": ""},
+    {"clock_id": 1, "card_id": "0010000002", "emp_id": "10000002", "KqDate": "2024-01-09 00:00:00", "KqTime": "1899-12-30 02:47:27", "mark": 0, "flag": 0, "sign_cause": ""}
+  ]
+}

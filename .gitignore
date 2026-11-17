@@ -1,0 +1,13 @@
+*.log
+*.pyc
+*.spec
+*.bak
+.pytest_cache/
+.venv/
+__pycache__/
+build/
+dist/
+dist-installer/
+data/
+tests/_db/
+.claude/
