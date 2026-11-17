@@ -49,8 +49,12 @@ class WebService:
             return
         if not port_free(self.port):
             raise OSError("埠 %d 已被其他程式使用" % self.port)
-        env = dict(os.environ, ATT_WEB_PORT=str(self.port), ATT_WEB_HOST="0.0.0.0", ATT_WEB_CHILD="1",
-                   ZMS_HR_DATA_DIR=self.hr_dir, ATT_DATA_DIR=data_dir(), FLET_FORCE_WEB_SERVER="true")
+        # 桌面版的 Flet 會把 FLET_SERVER_IP 設成 127.0.0.1，子程序繼承後會蓋掉 host → 明確改成對外
+        env = dict(os.environ, ATT_WEB_PORT=str(self.port), ATT_WEB_HOST="0.0.0.0", FLET_SERVER_IP="0.0.0.0",
+                   ATT_WEB_CHILD="1", ZMS_HR_DATA_DIR=self.hr_dir, ATT_DATA_DIR=data_dir(),
+                   FLET_FORCE_WEB_SERVER="true")
+        for k in ("FLET_SERVER_PORT", "FLET_SERVER_UDS_PATH", "FLET_DART_BRIDGE_PORT"):
+            env.pop(k, None)                           # 桌面版給自己 Flutter 視窗用的連線設定，子程序不要沿用
         env.pop("ATT_DEV_LOGIN", None)                 # 線上版一律要登入
         self.log = open(os.path.join(data_dir(), "web.log"), "ab")
         self.proc = subprocess.Popen(_cmd(), env=env, stdout=self.log, stderr=subprocess.STDOUT,
