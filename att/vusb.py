@@ -4,7 +4,7 @@
 * 考勤機【數據管理】→【導出新出入記錄】寫進虛擬 U 盤 → 小裝置把檔案上傳到本系統 → 自動匯入
   （同一檔案不重複、原始檔存查、依班表分上下班），回覆後小裝置刪掉 U 盤上的檔案，空間不會滿。
 * 本系統「送到考勤機」的人員資訊表放進待送清單 → 小裝置取走、放進虛擬 U 盤 →
-  考勤機【用戶管理】→【上傳用戶資訊】讀入。
+  考勤機【用戶管理】→【上傳用戶信息】讀入。
 
 通訊（HTTP，區網；每個請求都要帶 X-Token: 配對碼）
   POST /api/vusb/hello                 JSON {agent, name, machine_no, version, free_bytes, total_bytes, files, state}
@@ -39,6 +39,19 @@ def new_token():
     """配對碼：8 碼大寫英數（避開 0/O、1/I）。"""
     abc = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
     return "".join(secrets.choice(abc) for _ in range(8))
+
+
+def _remotable(fn):
+    """手機 App：core 是 RemoteCore 時，改請公司電腦執行（att.api 的 vusb 物件）。"""
+    import functools
+
+    @functools.wraps(fn)
+    def w(core, *a, **kw):
+        r = getattr(type(core), "remote_vusb", None)
+        if r is not None:
+            return core.remote_vusb(fn.__name__, *a, **kw)
+        return fn(core, *a, **kw)
+    return w
 
 
 # ==================================================================== 業務
@@ -77,6 +90,13 @@ def firmware_info():
     return best
 
 
+def firmware_version(core=None):
+    """系統內附韌體的版本（手機 App 問公司電腦）。"""
+    if core is not None and getattr(type(core), "remote_vusb", None) is not None:
+        return core.remote_vusb("firmware_version")
+    return firmware_info()[0]
+
+
 def _ver(v):
     try:
         return tuple(int(x) for x in str(v).split("."))
@@ -106,6 +126,7 @@ def diag_text(a):
     return "、".join(parts)
 
 
+@_remotable
 def agents(core):
     rows = core.db.rows("SELECT *, TIMESTAMPDIFF(SECOND, last_seen, NOW()) AS age FROM att_vusb ORDER BY agent")
     for r in rows:
@@ -113,6 +134,7 @@ def agents(core):
     return rows
 
 
+@_remotable
 def pending(core, machine_no=None):
     sql = "SELECT id, name, size, machine_no FROM att_vusb_outbox WHERE delivered IS NULL"
     args = []
@@ -122,8 +144,65 @@ def pending(core, machine_no=None):
     return core.db.rows(sql + " ORDER BY id", args)
 
 
+@_remotable
 def outbox(core, limit=30):
     return core.db.rows("SELECT * FROM att_vusb_outbox ORDER BY id DESC LIMIT %d" % int(limit))
+
+
+# ==================================================================== 檔案總管（韌體 1.4 起：經 Wi-Fi 看 U 盤裡的檔案）
+BROWSE_MIN_VERSION = "1.4.0"
+
+
+def _token():
+    from .hrlink import AppSettings
+    return AppSettings.load().extra.get("vusb_token", "")
+
+
+def _board(core, agent):
+    a = core.db.row("SELECT * FROM att_vusb WHERE agent=%s", (agent,))
+    if not a or not a["ip"]:
+        raise BizError("找不到這個虛擬 U 盤的網路位址，請等它連上系統")
+    if _ver(a["version"] or "0") < _ver(BROWSE_MIN_VERSION):
+        raise BizError("虛擬 U 盤的韌體 %s 還不能查看檔案，更新到 %s 以上（連上系統後會自動無線更新）"
+                       % (a["version"] or "—", BROWSE_MIN_VERSION))
+    return a
+
+
+def _board_get(ip, path, timeout=15):
+    import urllib.error
+    import urllib.request
+    req = urllib.request.Request("http://%s%s" % (ip, path), headers={"X-Token": _token()})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return r.read()
+    except urllib.error.HTTPError as e:
+        try:
+            msg = json.loads(e.read().decode("utf-8")).get("error")
+        except Exception:
+            msg = "HTTP %s" % e.code
+        raise BizError("虛擬 U 盤回覆：%s" % msg)
+    except OSError as e:
+        raise BizError("連不到虛擬 U 盤（%s）：%s" % (ip, getattr(e, "reason", e)))
+
+
+@_remotable
+def board_files(core, agent):
+    """虛擬 U 盤裡現在的所有檔案：{files:[{path, size, time}], free, total}（含考勤機剛寫入、還沒傳回的）。"""
+    core.need(1)
+    a = _board(core, agent)
+    out = json.loads(_board_get(a["ip"], "/files").decode("utf-8"))
+    out["files"].sort(key=lambda f: f["path"].lower())
+    return out
+
+
+@_remotable
+def board_file(core, agent, path):
+    """讀虛擬 U 盤上的一個檔案（只讀，不會刪除）→ {name, data（base64）}。"""
+    import base64
+    core.need(1)
+    a = _board(core, agent)
+    data = _board_get(a["ip"], "/file?path=" + urllib.parse.quote(path), timeout=60)
+    return {"name": path.split("/")[-1], "data": base64.b64encode(data).decode("ascii")}
 
 
 RECORD_RE = re.compile(r"(?i)^((glg|agl)_\d+\.txt|dcjl.*\.txt)$")
@@ -148,7 +227,7 @@ def receive_other(core, rel, data, agent="", machine_no=1):
         arc = core.archive(path, "考勤機匯出")
         note, total = "%d bytes" % len(data), 0
         if re.match(r"(?i)^人員資訊表.*\.xls$", os.path.basename(rel)):
-            # 考勤機【下載用戶資訊】：用機器上的實況更新已對應員工的卡號、指紋／人臉登記（不自動新增員工）
+            # 考勤機【下載用戶信息】：用機器上的實況更新已對應員工的卡號、指紋／人臉登記（不自動新增員工）
             try:
                 from .usbfmt import read_user_sheet
                 people = read_user_sheet(path)
@@ -208,6 +287,7 @@ def receive_file(core, name, data, agent="", machine_no=1, sha1=""):
             pass
 
 
+@_remotable
 def queue_user_sheet(core, machine_no=1, only_changed=True):
     """產生人員資訊表（存查）並放進待送清單，小裝置下次回報時就會取走。"""
     core.need()
@@ -239,6 +319,7 @@ def outbox_done(core, oid, agent=""):
                  (agent[:40], int(oid)))
 
 
+@_remotable
 def cancel_outbox(core, oid):
     core.need()
     core.db.exec("DELETE FROM att_vusb_outbox WHERE id=%s AND delivered IS NULL", (int(oid),))

@@ -43,7 +43,7 @@ class VirtualUsb(ft.Column):
             T.title_text("考勤機上的虛擬 U 盤", 17), self.agents_box,
             ft.Row([T.card(ft.Column([T.title_text("送往考勤機", 16), self.outbox_grid], spacing=8), expand=True),
                     T.card(ft.Column([T.title_text("從考勤機收到的檔案", 16), self.recv_grid], spacing=8), expand=True)],
-                   spacing=16, vertical_alignment=ft.CrossAxisAlignment.START)],
+                   spacing=16, vertical_alignment=ft.CrossAxisAlignment.START, data="split")],
             spacing=16, scroll=ft.ScrollMode.AUTO, expand=True)
         self.refresh(update=False)
         ctx.app.vusb_page = self
@@ -74,7 +74,7 @@ class VirtualUsb(ft.Column):
         st = app.app_st.extra
         srv = app.vusb
         if self.ctx.web:
-            self.svc.controls = [T.muted("線上版只能查看狀態與送檔；接收服務的開關與配對碼請在公司電腦的考勤系統設定。"
+            self.svc.controls = [T.muted("線上版與手機 App 只能查看狀態與送檔；接收服務的開關與配對碼請在公司電腦的考勤系統設定。"
                                          "下面的板子卡片顯示的是最新回報。", 13)]
         elif srv and srv.running:
             ips = vusb.local_ips()
@@ -91,7 +91,7 @@ class VirtualUsb(ft.Column):
         else:
             self.svc.controls = [T.muted("服務未啟用：虛擬 U 盤連不進來。打開上面的開關即可啟用。", 13)]
         cards = []
-        fw, _ = vusb.firmware_info()
+        fw = vusb.firmware_version(self.ctx.core)
         for a in vusb.agents(self.ctx.core):
             total, free = a["total_bytes"] or 0, a["free_bytes"] or 0
             used = max(total - free, 0)
@@ -103,6 +103,8 @@ class VirtualUsb(ft.Column):
                                            weight=ft.FontWeight.W_700),
                                    T.muted("%s　IP %s　韌體 %s" % (a["agent"], a["ip"], a["version"] or "—"), 12)],
                                   spacing=0, expand=True),
+                        T.btn("檔案總管", I.FOLDER_OPEN, lambda e, a=a: self.browse(a), kind="outline",
+                              visible=bool(a["ip"]) and vusb._ver(a["version"] or "0") >= vusb._ver(vusb.BROWSE_MIN_VERSION)),
                         T.btn("板子設定網頁", I.OPEN_IN_NEW,
                               lambda e, ip=a["ip"]: self.ctx.page.launch_url("http://%s/" % ip), kind="ghost",
                               visible=bool(a["online"] and a["ip"])),
@@ -129,6 +131,82 @@ class VirtualUsb(ft.Column):
                                  for r in rec])
         if update:
             self.update()
+
+    # ---------------------------------------------------------------- 檔案總管（看考勤機在虛擬 U 盤裡寫了什麼）
+    def browse(self, a):
+        box = ft.Column([ft.Row([ft.ProgressRing(width=20, height=20), ft.Text("正在讀取虛擬 U 盤…")])], spacing=6,
+                        scroll=ft.ScrollMode.AUTO, height=420)
+        name = a["name"] or a["agent"]
+
+        def load():
+            try:
+                info = vusb.board_files(self.ctx.core, a["agent"])
+            except Exception as ex:
+                box.controls = [ft.Row([T.icon_tile(I.ERROR_OUTLINE, "rose", 36), ft.Text(str(ex), expand=True)])]
+                box.update()
+                return
+            files = info.get("files") or []
+            rows = [T.muted("共 %d 個檔案　剩餘 %s／%s　（只讀，不會刪除或改動 U 盤裡的檔案）"
+                            % (len(files), _mb(info.get("free")), _mb(info.get("total"))), 12)]
+            for f in files:
+                rows.append(ft.Container(ft.Row([
+                    T.icon_tile(I.FOLDER if "/" in f["path"] else I.DESCRIPTION, "amber" if f.get("hidden") else "sky", 34),
+                    ft.Column([ft.Text(f["path"], size=14, weight=ft.FontWeight.W_600, selectable=True),
+                               T.muted("%s　%s" % (_size(f["size"]), f.get("time", "")), 11)], spacing=0, expand=True),
+                    T.btn("開啟", I.OPEN_IN_NEW, lambda e, p=f["path"]: self.ctx.page.run_task(self._open, a, [p]),
+                          kind="ghost")]), padding=6, border_radius=10, border=ft.Border.all(1, T.LINE)))
+            if not files:
+                rows.append(T.empty_state(I.FOLDER_OFF, "虛擬 U 盤是空的", "考勤機匯出的檔案傳回系統後就會從 U 盤刪除"))
+            box.controls = rows
+            self._browse_files = [f["path"] for f in files]
+            box.update()
+        self._browse_files = []
+        acts = [T.btn("重新整理", I.REFRESH, lambda e: self.ctx.page.run_thread(load), kind="ghost"),
+                T.btn("全部存到電腦", I.DOWNLOAD,
+                      lambda e: self.ctx.page.run_task(self._open, a, list(self._browse_files), True), kind="outline"),
+                T.btn("關閉", on_click=lambda e: self.ctx.close())]
+        self.ctx.dialog("檔案總管：%s" % name, box, acts, icon=I.FOLDER_OPEN, tone="amber", width=640)
+        self.ctx.page.run_thread(load)
+
+    async def _open(self, a, paths, folder=False):
+        """把虛擬 U 盤上的檔案存到這台電腦（存查\\虛擬U盤\\<時間>\\…）並開啟；線上版／手機改下載。"""
+        import base64
+        import datetime as dt
+        import os
+        if not paths:
+            self.ctx.toast("沒有檔案", True)
+            return
+        if self.ctx.web:
+            for p in paths:
+                try:
+                    r = vusb.board_file(self.ctx.core, a["agent"], p)
+                except Exception as ex:
+                    self.ctx.toast(str(ex), True)
+                    return
+                await self.ctx.save_bytes(r["name"], base64.b64decode(r["data"]))
+            return
+        from ..hrlink import data_dir
+        root = os.path.join(data_dir(), "存查", "虛擬U盤", dt.datetime.now().strftime("%Y%m%d_%H%M%S"))
+        saved = []
+        for p in paths:
+            try:
+                r = vusb.board_file(self.ctx.core, a["agent"], p)
+            except Exception as ex:
+                self.ctx.toast("%s：%s" % (p, ex), True)
+                continue
+            dst = os.path.join(root, *[x for x in p.split("/") if x not in ("", ".", "..")])
+            os.makedirs(os.path.dirname(dst), exist_ok=True)
+            with open(dst, "wb") as fh:
+                fh.write(base64.b64decode(r["data"]))
+            saved.append(dst)
+        if not saved:
+            return
+        if folder or len(saved) > 1:
+            T.open_file(root)
+            self.ctx.toast("已存 %d 個檔案到電腦：%s" % (len(saved), root))
+        else:
+            T.open_file(saved[0])
+            self.ctx.toast("已存到電腦並開啟：%s" % saved[0])
 
     # ---------------------------------------------------------------- 操作
     def toggle(self, e):
@@ -182,7 +260,12 @@ class VirtualUsb(ft.Column):
                 self.ctx.toast("已放進待送清單（%d 人），虛擬 U 盤下次連線就會取走" % r["count"])
                 self.refresh()
         self.ctx.dialog("送人員資訊表到考勤機", ft.Column([
-            mno, mode, T.muted("檔案會先存查；虛擬 U 盤取走後，請在考勤機上執行【用戶管理】→【上傳用戶資訊】。", 12)],
+            mno, mode, T.muted("檔案會先存查；虛擬 U 盤取走後，請在考勤機上執行【用戶管理】→【上傳用戶信息】。", 12)],
             spacing=10, tight=True),
             [T.btn("取消", kind="ghost", on_click=lambda e: self.ctx.close()), T.btn("送出", I.SEND, go)],
             icon=I.SEND, tone="amber")
+
+
+def _size(n):
+    n = n or 0
+    return "%d B" % n if n < 1024 else "%.1f KB" % (n / 1024) if n < 1048576 else "%.1f MB" % (n / 1048576)

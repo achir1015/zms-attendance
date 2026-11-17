@@ -401,7 +401,8 @@ class Ctx:
         self.app = app
         self.page = app.page
         self.core = getattr(app, 'core', None)
-        self.web = bool(getattr(app.page, "web", False))    # 線上版（瀏覽器）：檔案改上傳／下載、語音在瀏覽器播放
+        self.mobile = bool(getattr(app, "mobile", False))  # 手機／平板 App：資料在公司電腦，檔案和線上版一樣上傳／下載
+        self.web = bool(getattr(app.page, "web", False)) or self.mobile   # 線上版（瀏覽器）：檔案改上傳／下載、語音用 flet_audio
         self._audio = None
 
     # ---------------------------------------------------------- 語音（線上版在瀏覽器播放，各分頁各自一個播放器）
@@ -457,7 +458,7 @@ class Ctx:
             return
         if self.web or MOBILE:
             if os.path.isdir(path):
-                self.toast("線上版不能開啟電腦上的資料夾，請在公司電腦查看", True)
+                self.toast("這裡不能開啟公司電腦上的資料夾，請在公司電腦查看", True)
                 return
             with open(path, "rb") as f:
                 await self.save_bytes(os.path.basename(path), f.read())

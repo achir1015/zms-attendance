@@ -44,7 +44,7 @@ bool serverReady();
 void saveConfig();
 void writeSettingsFile();
 
-#define FW_VERSION "1.3.1"
+#define FW_VERSION "1.4.1"
 #define SECTOR_SIZE 512
 #define SECTOR_COUNT 131072             // 對外宣稱 64MB（FAT32；只有寫過的磁區才佔空間）
 #define POOL_SECTORS 12288              // 實際儲存空間 6MB（PSRAM）
@@ -547,8 +547,80 @@ void portalSave() {
   }
 }
 
+// ------------------------------------------------------------ 檔案總管（考勤系統經 Wi-Fi 查看 U 盤裡的檔案）
+// GET /files            → {"files":[{"path","size","time"}],"free","total"}
+// GET /file?path=<相對路徑> → 檔案內容
+// 都要帶配對碼（標頭 X-Token 或 ?auth=），從設定熱點連進來則不用。只讀不寫，考勤機插著也能用。
+bool authorized() {
+  if (viaHotspot()) return true;
+  String t = web.header("X-Token");
+  if (!t.length()) t = web.arg("auth");
+  t.toUpperCase();
+  return cfg.token.length() && t == cfg.token;
+}
+String fatTime(WORD d, WORD t) {
+  char b[24];
+  snprintf(b, sizeof(b), "%04d-%02d-%02d %02d:%02d:%02d", 1980 + (d >> 9), (d >> 5) & 15, d & 31, t >> 11,
+           (t >> 5) & 63, (t & 31) * 2);
+  return String(b);
+}
+void listDir(const String &rel, String &j, int depth) {
+  FF_DIR dir;
+  FILINFO fi;
+  if (f_opendir(&dir, ("0:/" + rel).c_str()) != FR_OK) return;
+  std::vector<String> subs;
+  while (f_readdir(&dir, &fi) == FR_OK && fi.fname[0]) {
+    String p = rel.length() ? rel + "/" + fi.fname : String(fi.fname);
+    if (fi.fattrib & AM_DIR) {
+      if (depth < 3 && !String(fi.fname).equalsIgnoreCase("System Volume Information")) subs.push_back(p);
+      continue;
+    }
+    if (j.length()) j += ",";
+    j += "{\"path\":\"" + jsonEscape(p) + "\",\"size\":" + String((uint32_t)fi.fsize) + ",\"time\":\"" +
+         fatTime(fi.fdate, fi.ftime) + "\"" + String((fi.fattrib & (AM_HID | AM_SYS)) ? ",\"hidden\":true" : "") + "}";
+  }
+  f_closedir(&dir);
+  for (auto &s : subs) listDir(s, j, depth + 1);
+}
+void webFiles() {
+  if (!authorized()) { web.send(401, "application/json", "{\"error\":\"配對碼不正確\"}"); return; }
+  if (!mountFs()) { web.send(500, "application/json", "{\"error\":\"讀不到檔案系統\"}"); return; }
+  String j;
+  listDir("", j, 0);
+  refreshListing();
+  unmountFs();
+  web.send(200, "application/json; charset=utf-8", "{\"files\":[" + j + "],\"free\":" + String(freeBytes) +
+                                                     ",\"total\":" + String(totalBytes) + "}");
+}
+void webFile() {
+  if (!authorized()) { web.send(401, "application/json", "{\"error\":\"配對碼不正確\"}"); return; }
+  String p = web.arg("path");
+  if (!p.length() || p.indexOf("..") >= 0) { web.send(400, "application/json", "{\"error\":\"路徑不對\"}"); return; }
+  if (!mountFs()) { web.send(500, "application/json", "{\"error\":\"讀不到檔案系統\"}"); return; }
+  uint8_t *b;
+  size_t n;
+  bool ok = readFile(("0:/" + p).c_str(), &b, &n);
+  unmountFs();
+  if (!ok) { web.send(404, "application/json", "{\"error\":\"找不到檔案\"}"); return; }
+  web.sendHeader("X-Filename", urlEncode(p));
+  web.setContentLength(n);
+  web.send(200, "application/octet-stream", "");
+  WiFiClient c = web.client();
+  size_t off = 0;
+  while (off < n && c.connected()) {
+    size_t w = c.write(b + off, n - off > 4096 ? 4096 : n - off);
+    if (!w) break;
+    off += w;
+  }
+  free(b);
+}
+
 void startWeb() {
   if (webStarted) return;
+  const char *hdrs[] = {"X-Token"};
+  web.collectHeaders(hdrs, 1);
+  web.on("/files", webFiles);
+  web.on("/file", webFile);
   web.on("/", portalPage);
   web.on("/scan", portalScan);
   web.on("/status", portalStatus);
@@ -871,8 +943,10 @@ void loop() {
   std::vector<int> pending;
   if (now - lastHello > HELLO_INTERVAL_MS || lastHello == 0) {
     lastHello = now;
-    if (hello(pending) && !pending.empty()) wantSync = true;
-    else if (serverReady()) lastStatus = lastStatus.startsWith("連不到") ? "連線正常" : lastStatus;
+    bool ok = hello(pending);
+    if (ok && !pending.empty()) wantSync = true;
+    // 回報成功：之前的連線錯誤訊息（連不到／配對碼不正確）改成「連線正常」
+    if (ok && (lastStatus.startsWith("連不到") || lastStatus == "配對碼不正確")) lastStatus = "連線正常";
   }
   if (wantSync) {
     wantSync = false;

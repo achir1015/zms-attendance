@@ -2,6 +2,7 @@
 # 建置 macOS 版：dist-mac/資料助秘刷卡考勤系統.app 與 dist-mac/ZMSAttendance-<版本>-mac.dmg
 # 不附 MariaDB：本系統使用「資料助秘之一般公司人事薪資差勤」的資料庫
 # 用法（在 Mac 上）：bash tools/build_macos.sh
+#   DMG_ONLY=1：沿用 dist-mac 裡已簽章、公證的 App，只重做 DMG（DMG 簽章或公證因 Apple 伺服器失敗時用）
 set -euo pipefail
 cd "$(dirname "$0")/.."
 export PATH=/usr/local/bin:/opt/homebrew/bin:$PATH
@@ -10,7 +11,9 @@ VER=$($PY -c "import att; print(att.APP_VERSION)")
 NAME="資料助秘刷卡考勤系統"
 BUNDLE_ID="com.achir.zmsattendance"
 echo "== 版本 $VER"
+FINAL="dist-mac/$NAME.app"
 
+if [ -z "${DMG_ONLY:-}" ]; then
 rm -rf build-mac dist-mac build
 mkdir -p build-mac dist-mac
 
@@ -44,8 +47,11 @@ pb "Add :NSLocalNetworkUsageDescription string 接收插在考勤機上的虛擬
 pb "Delete :NSAppleEventsUsageDescription"
 pb "Add :NSAppleEventsUsageDescription string 在桌面建立本系統的替身"
 
-FINAL="dist-mac/$NAME.app"
 rm -rf "$FINAL"; mv "$APP" "$FINAL"
+else
+  [ -d "$FINAL" ] || { echo "DMG_ONLY：找不到 $FINAL"; exit 1; }
+  mkdir -p build-mac
+fi
 # 專用簽章鑰匙圈（~/Developer/zms-signing，密碼檔不進 git）：先解鎖，SSH 下也能簽
 SIGN_KC="$HOME/Library/Keychains/zms-signing.keychain-db"
 if [ -f "$SIGN_KC" ] && [ -f "$HOME/Developer/zms-signing/kc.pass" ]; then
@@ -53,7 +59,9 @@ if [ -f "$SIGN_KC" ] && [ -f "$HOME/Developer/zms-signing/kc.pass" ]; then
 fi
 # 簽章：鑰匙圈有「Developer ID Application」憑證就正式簽章＋強化執行階段（可公證）；沒有就 ad-hoc
 IDENT=$(security find-identity -v -p codesigning | grep -o '"Developer ID Application: [^"]*"' | head -1 | tr -d '"' || true)
-if [ -n "$IDENT" ]; then
+if [ -n "${DMG_ONLY:-}" ]; then
+  echo "== 沿用已簽章的 App"
+elif [ -n "$IDENT" ]; then
   echo "== 簽章（${IDENT}）"
   ENT=packaging/mac-entitlements.plist
   # 由內而外：先簽 MariaDB 的函式庫與執行檔，再簽主程式與整個 App
@@ -82,7 +90,9 @@ notarize() {   # $1＝要送的檔案（.zip 或 .dmg）
 }
 CAN_NOTARIZE=""
 if [ -n "$IDENT" ] && xcrun notarytool history --keychain-profile "$NOTARY" >/dev/null 2>&1; then CAN_NOTARIZE=1; fi
-if [ -n "$CAN_NOTARIZE" ]; then
+if [ -n "${DMG_ONLY:-}" ]; then
+  echo "== 沿用已公證的 App"
+elif [ -n "$CAN_NOTARIZE" ]; then
   echo "== 公證 App"
   ditto -c -k --keepParent "$FINAL" build-mac/app.zip
   notarize build-mac/app.zip

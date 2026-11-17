@@ -6,7 +6,7 @@ DIR="$(pwd)"
 rm -f build-mac.log
 osascript <<EOF
 tell application "Terminal"
-  do script "cd '$DIR' && caffeinate -i bash tools/build_macos.sh > build-mac.log 2>&1; echo EXIT=\$? >> build-mac.log; exit"
+  do script "cd '$DIR' && ${DMG_ONLY:+DMG_ONLY=1 }caffeinate -i bash tools/build_macos.sh > build-mac.log 2>&1; echo EXIT=\$? >> build-mac.log; exit"
 end tell
 EOF
 echo "已在終端機啟動 macOS 建置"

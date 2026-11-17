@@ -66,22 +66,55 @@ class AppSettings:
         return os.path.join(data_dir(), "settings.json")
 
     @classmethod
-    def load(cls):
-        s = cls()
+    def _read(cls):
         try:
             with open(cls.file(), encoding="utf-8") as f:
-                for k, v in json.load(f).items():
-                    if k in cls.FIELDS:
-                        setattr(s, k, v)
+                d = json.load(f)
+            return d if isinstance(d, dict) else {}
         except (OSError, ValueError):
-            pass
+            return {}
+
+    def _snapshot(self):
+        import copy
+        self._base = copy.deepcopy({k: getattr(self, k) for k in self.FIELDS})
+
+    @classmethod
+    def load(cls):
+        s = cls()
+        for k, v in cls._read().items():
+            if k in cls.FIELDS:
+                setattr(s, k, v)
+        s._snapshot()
         return s
 
     def save(self):
+        """只寫入這個視窗改過的項目（先讀出檔案目前內容再合併）：
+        同時開著兩個視窗時，不會把另一個視窗剛存的設定（例如新的配對碼）蓋回舊值。"""
         if os.environ.get("ATT_WEB_CHILD"):      # 線上版子程序：設定一律由公司電腦的桌面版寫入
             return
+        base = getattr(self, "_base", None) or {k: (v.copy() if isinstance(v, dict) else v)
+                                                 for k, v in self.FIELDS.items()}
+        disk = {k: v for k, v in self._read().items() if k in self.FIELDS}
+        merged = {k: disk.get(k, getattr(self, k)) for k in self.FIELDS}
+        for k in self.FIELDS:
+            cur = getattr(self, k)
+            if k == "extra":
+                ex = dict(disk.get("extra") or {})
+                old = base.get("extra") or {}
+                for kk, vv in (cur or {}).items():
+                    if kk not in old or old[kk] != vv:
+                        ex[kk] = vv
+                for kk in old:
+                    if kk not in (cur or {}):
+                        ex.pop(kk, None)
+                merged["extra"] = ex
+            elif cur != base.get(k) or k not in disk:
+                merged[k] = cur
         with open(self.file(), "w", encoding="utf-8") as f:
-            json.dump({k: getattr(self, k) for k in self.FIELDS}, f, ensure_ascii=False, indent=2)
+            json.dump(merged, f, ensure_ascii=False, indent=2)
+        for k, v in merged.items():              # 也帶入別的視窗存的新值
+            setattr(self, k, v)
+        self._snapshot()
 
 
 def hr_candidates(app: AppSettings = None):

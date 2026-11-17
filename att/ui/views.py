@@ -80,7 +80,7 @@ class Home(ft.Column):
             kpis,
             ft.Row([T.card(ft.Column([T.title_text("接下來要做", 17), todo], spacing=10), expand=2),
                     T.card(ft.Column([T.title_text("最近的匯入", 17), g], spacing=10), expand=3)],
-                   spacing=16, vertical_alignment=ft.CrossAxisAlignment.START)],
+                   spacing=16, vertical_alignment=ft.CrossAxisAlignment.START, data="split")],
             spacing=18, scroll=ft.ScrollMode.AUTO, expand=True)
 
 
@@ -277,7 +277,7 @@ class Employees(ft.Column):
                 return
             if path and box.get("r"):
                 self.ctx.close()
-                self.ctx.toast("已產生 %d 人的人員資訊表並存查。存到 U 盤後，在考勤機【用戶管理】→【上傳用戶資訊】匯入"
+                self.ctx.toast("已產生 %d 人的人員資訊表並存查。存到 U 盤後，在考勤機【用戶管理】→【上傳用戶信息】匯入"
                                % box["r"]["count"])
         self.ctx.dialog("產生人員資訊表", ft.Column([
             T.muted("上次產生：%s" % (ts_show(last) if last else "還沒有產生過"), 12),
@@ -382,7 +382,16 @@ class Imports(ft.Column):
 
     def open_archive(self, r):
         a = r.get("archive")
-        if a and os.path.isfile(a):
+        if a and self.ctx.mobile:                              # 手機 App：存查檔在公司電腦，下載回來
+            async def dl():
+                try:
+                    name, data = self.ctx.core.archive_data(a)
+                except BizError as ex:
+                    self.ctx.toast(str(ex), True)
+                    return
+                await self.ctx.save_bytes(name, data)
+            self.ctx.page.run_task(dl)
+        elif a and os.path.isfile(a):
             self.ctx.page.run_task(self.ctx.show_file, a)      # 線上版：下載存查的原始檔
         else:
             self.ctx.toast("這筆沒有存查檔，或檔案已被移走", True)
@@ -522,9 +531,20 @@ class Help(ft.Row):
         self.token = 0
         self.toc = ft.Column(spacing=4, scroll=ft.ScrollMode.AUTO, expand=True)
         self.stage = ft.Column(spacing=18, scroll=ft.ScrollMode.AUTO, expand=True)
-        super().__init__([T.card(ft.Column([T.title_text("教學目錄", 16), self.toc], spacing=10), width=280, padding=14),
-                          T.card(self.stage, expand=True, padding=28)], expand=True, spacing=16,
-                         vertical_alignment=ft.CrossAxisAlignment.START)
+        if T.MOBILE:
+            # 手機直向：目錄改成下拉選單，內容整頁捲動
+            self.pick = T.dropdown("選擇課程", [(s["key"], "%d. %s" % (i + 1, s["title"])) for i, s in enumerate(GUIDE)],
+                                   value=key, filterable=False, on_select=lambda e: self.show(self.pick.value))
+            self.pick.expand = True
+            self.stage.scroll = None
+            super().__init__([ft.Column([ft.Container(ft.Row([self.pick]), padding=ft.Padding.only(top=8)),
+                                         T.card(self.stage, padding=14)], spacing=12,
+                                        expand=True, data=T.READY)], expand=True)
+        else:
+            super().__init__([T.card(ft.Column([T.title_text("教學目錄", 16), self.toc], spacing=10), width=280,
+                                     padding=14),
+                              T.card(self.stage, expand=True, padding=28)], expand=True, spacing=16,
+                             vertical_alignment=ft.CrossAxisAlignment.START)
         self.show(key, update=False)
 
     def show(self, key, update=True, autoplay=False):
@@ -547,19 +567,27 @@ class Help(ft.Row):
                                            ft.Text(text, size=13, text_align=ft.TextAlign.CENTER, color=T.TEXT,
                                                    weight=ft.FontWeight.W_600)],
                                           horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=8),
-                                width=140, padding=12, border_radius=16, opacity=0.35,
+                                width=118 if T.MOBILE else 140, padding=10 if T.MOBILE else 12,
+                                border_radius=16, opacity=0.35,
                                 animate_opacity=ft.Animation(400, ft.AnimationCurve.EASE_OUT),
                                 animate_scale=ft.Animation(400, ft.AnimationCurve.EASE_OUT_BACK), scale=0.92,
                                 border=ft.Border.all(2, "#00000000"))
             self.tiles.append(tile)
             row.append(tile)
         idx = [s["key"] for s in GUIDE].index(key)
+        if T.MOBILE:
+            self.pick.value = key
         self.play_btn = T.btn("播放語音教學", I.PLAY_CIRCLE, lambda e: self.play())
+        head = ft.Row([T.icon_tile(I.RECORD_VOICE_OVER, "rose", 40 if T.MOBILE else 52, radius=16),
+                       ft.Column([T.muted("第 %d 課，共 %d 課" % (idx + 1, len(GUIDE)), 12),
+                                  T.title_text(g["title"], 18 if T.MOBILE else 22)], spacing=0, expand=True)]
+                      + ([] if T.MOBILE else [self.play_btn,
+                                              T.btn("停止", I.STOP_CIRCLE, lambda e: self.stop(), kind="outline")]),
+                      spacing=14)
         self.stage.controls = [
-            ft.Row([T.icon_tile(I.RECORD_VOICE_OVER, "rose", 52, radius=16),
-                    ft.Column([T.muted("第 %d 課，共 %d 課" % (idx + 1, len(GUIDE)), 12), T.title_text(g["title"])],
-                              spacing=0, expand=True), self.play_btn,
-                    T.btn("停止", I.STOP_CIRCLE, lambda e: self.stop(), kind="outline")], spacing=14),
+            head,
+            *([ft.Row([self.play_btn, T.btn("停止", I.STOP_CIRCLE, lambda e: self.stop(), kind="outline")],
+                      spacing=10, wrap=True)] if T.MOBILE else []),
             ft.Container(ft.Row(row, wrap=True, spacing=8, run_spacing=12,
                                 vertical_alignment=ft.CrossAxisAlignment.CENTER), padding=10),
             *([ft.Container(ft.Image(src=g["image"], fit=ft.BoxFit.CONTAIN), border_radius=14,
@@ -643,6 +671,7 @@ class System(ft.Column):
                                       T.btn("開啟資料夾", I.FOLDER_OPEN, lambda e: T.open_file(data_dir()),
                                             kind="outline")], spacing=10)], spacing=10)),
             self.web_card(),
+            self.api_card(),
             T.card(ft.Column([T.title_text("版本更新", 17), self.status, self.bar,
                               ft.Row([T.btn("檢查更新", I.REFRESH, lambda e: self.check(), kind="outline")])],
                              spacing=10))], spacing=18, scroll=ft.ScrollMode.AUTO, expand=True)
@@ -718,6 +747,80 @@ class System(ft.Column):
         ex["web_enabled"] = on
         app.app_st.save()
         self.render_web()
+        self.update()
+
+    # ---------------------------------------------------------------- 手機 App 連線
+    def api_card(self):
+        from .. import api
+        ex = self.ctx.app.app_st.extra
+        can = self.ctx.core.can("ATT", 2)
+        self.api_switch = T.switch("開啟手機 App 連線（iPhone／iPad／Android App 經同一個 Wi-Fi 連到這台電腦）",
+                                   bool(ex.get("api_enabled")), on_change=self.toggle_api, disabled=not can)
+        self.api_port = T.field("埠", str(ex.get("api_port") or api.DEFAULT_PORT), width=110,
+                                keyboard_type=ft.KeyboardType.NUMBER, disabled=not can)
+        self.api_box = ft.Column(spacing=10)
+        self.render_api()
+        return T.card(ft.Column([T.title_text("手機 App 連線", 17),
+                                 ft.Row([self.api_switch, self.api_port], spacing=16, wrap=True), self.api_box],
+                                spacing=10))
+
+    def render_api(self):
+        from .. import api
+        srv = self.ctx.app.api
+        if srv and srv.running:
+            from urllib.parse import quote
+
+            from ..webserve import qr_png
+            rows = []
+            for u in srv.urls() or ["http://127.0.0.1:%d" % srv.port]:
+                link = api.DEEP_LINK % quote(u, safe="")
+                try:
+                    qr = ft.Image(src=qr_png(link), width=132, height=132)
+                except Exception:
+                    qr = ft.Container()
+                rows.append(ft.Row([qr, ft.Column([ft.Text(u, size=18, weight=ft.FontWeight.W_700, color=T.PRIMARY,
+                                                           selectable=True),
+                                                   T.muted("用手機相機掃描 QR Code，會自動開啟 App 並連到這台電腦", 12)],
+                                                  spacing=6)], spacing=16))
+            self.api_box.controls = [T.chip("服務執行中", "green", I.PHONE_IPHONE)] + rows + [
+                T.muted("App 安裝：iPhone／iPad 用 Safari 開 https://achir1015.github.io/zms-attendance/ios/ 。"
+                        "登入用人事系統的帳號（需要出勤管理權限）；關閉這個程式時連線服務也會停止。", 12),
+                T.muted("第一次開啟時，若 Windows 防火牆／macOS 詢問是否允許連入，請按允許（私人網路）。"
+                        "iPhone 第一次連線要允許 App 使用「區域網路」。", 12)]
+        else:
+            self.api_box.controls = [T.muted("未開啟。打開開關後，手機 App 就能查看打卡、編機器工號與卡號、上傳打卡檔、"
+                                             "經虛擬 U 盤送人員資訊表。", 13)]
+
+    def toggle_api(self, e):
+        app = self.ctx.app
+        ex = app.app_st.extra
+        on = bool(self.api_switch.value)
+        if on:
+            try:
+                port = int(self.api_port.value or 0)
+                assert 1024 <= port <= 65535
+            except Exception:
+                self.api_switch.value = False
+                self.ctx.toast("埠請填 1024～65535 的數字", True)
+                self.update()
+                return
+            ex["api_port"] = port
+            app.stop_api()
+            try:
+                app.start_api()
+            except Exception as ex2:
+                self.api_switch.value = False
+                ex["api_enabled"] = False
+                app.app_st.save()
+                self.render_api()
+                self.ctx.toast("手機 App 連線無法啟動：%s" % ex2, True)
+                self.update()
+                return
+        else:
+            app.stop_api()
+        ex["api_enabled"] = on
+        app.app_st.save()
+        self.render_api()
         self.update()
 
     def show_info(self, info):

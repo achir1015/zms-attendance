@@ -203,6 +203,10 @@ class Core:
         self.need()
         self.employee(emp)
         card = norm_card(card_no)
+        from .usbfmt import check_card
+        err = check_card(card)
+        if err:
+            raise BizError(err + "：%s" % card)
         if not card:
             self.db.exec("DELETE FROM att_cards WHERE emp=%s", (emp,))
             self.log("att_card_del", emp)

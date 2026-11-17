@@ -49,6 +49,10 @@ class App:
         self.vusb = None
         self.web = None                                   # 線上版網頁服務（桌面版才會開）
         self.is_web = bool(getattr(page, "web", False))   # 這個畫面是不是開在瀏覽器裡
+        self.mobile = False                               # iPhone／iPad／Android App（資料走公司電腦的手機連線服務）
+        self.client = None
+        self.server_info = None
+        self.api = None                                   # 電腦版：手機 App 連線服務
 
     # ================================================================ 啟動
     def start(self):
@@ -65,6 +69,13 @@ class App:
         p.bgcolor = T.BG
         p.padding = 0
         p.spacing = 0
+        from . import mobile
+        # 手機 App（開發預覽用 ATT_MOBILE；線上版開在手機瀏覽器不算，那是網頁版）
+        if os.environ.get("ATT_MOBILE") or (not self.is_web and mobile.is_mobile(p)):
+            self.mobile = True
+            self.is_web = False
+            mobile.start(self)
+            return
         try:
             if self.is_web:
                 raise RuntimeError("web")
@@ -204,6 +215,10 @@ class App:
     # ================================================================ 主畫面
     def main(self):
         p = self.page
+        if self.mobile and T.MOBILE:          # iPhone 直向：工具列＋抽屜選單
+            from . import mobile
+            mobile.main(self)
+            return
         self.sidebar = ft.Column(spacing=4, scroll=ft.ScrollMode.AUTO, expand=True)
         self.body = ft.Container(expand=True, padding=24)
         user = self.core.user
@@ -221,14 +236,21 @@ class App:
             ft.Container(ft.Row([T.icon_tile(I.PERSON, "sky", 32), ft.Column([
                 ft.Text(user["name"], size=13, color=ft.Colors.WHITE, weight=ft.FontWeight.W_600),
                 ft.Text(user["uid"], size=11, color="#9FB6D8")], spacing=0, expand=True),
+                ft.IconButton(I.LINK, icon_color="#C9D6EA", tooltip="更換公司電腦", visible=self.mobile,
+                              on_click=lambda e: self._switch_server()),
                 ft.IconButton(I.LOGOUT, icon_color="#C9D6EA", tooltip="登出", on_click=lambda e: self.logout())]),
                 padding=ft.Padding.only(top=10))], spacing=0),
             width=236, padding=16,
             gradient=ft.LinearGradient(begin=ft.Alignment.TOP_CENTER, end=ft.Alignment.BOTTOM_CENTER,
                                        colors=[T.SIDEBAR_TOP, T.SIDEBAR_BOTTOM]))
         p.controls.clear()
-        p.add(ft.Row([side, self.body], expand=True, spacing=0))
+        layout = ft.Row([side, self.body], expand=True, spacing=0)
+        p.add(ft.SafeArea(layout, expand=True) if self.mobile else layout)
         self.go("home")
+        if self.mobile:                 # iPad：資料在公司電腦，更新改開安裝頁
+            from . import mobile
+            p.run_thread(mobile.check_update, self)
+            return
         if self.is_web:                 # 線上版：服務都由公司電腦的桌面版負責
             return
         p.run_thread(self._check_update)
@@ -240,6 +262,12 @@ class App:
                 self.ctx.toast("虛擬 U 盤接收服務無法啟動：%s" % e, True)
         if self.app_st.extra.get("web_enabled"):
             p.run_thread(self._start_web_quiet)
+        if self.app_st.extra.get("api_enabled"):
+            try:
+                self.start_api()
+            except Exception as e:
+                log.exception("api start")
+                self.ctx.toast("手機 App 連線服務無法啟動：%s" % e, True)
 
     # ================================================================ 線上版網頁服務
     def start_web(self):
@@ -266,6 +294,25 @@ class App:
         if self.web:
             self.web.stop()
             self.web = None
+
+    # ================================================================ 手機 App 連線服務
+    def start_api(self):
+        from .. import api
+        if self.api and self.api.running:
+            return self.api
+        port = int(self.app_st.extra.get("api_port") or api.DEFAULT_PORT)
+        srv = api.ApiServer(self.db, port)
+        try:
+            srv.start()
+        except OSError as e:
+            raise BizError("埠 %d 被其他程式佔用（%s）" % (port, e))
+        self.api = srv
+        return srv
+
+    def stop_api(self):
+        if self.api:
+            self.api.stop()
+            self.api = None
 
     # ================================================================ 虛擬 U 盤接收服務
     def start_vusb(self):
@@ -301,7 +348,7 @@ class App:
         elif kind == "upload" and not info.get("ok"):
             self.ctx.toast("虛擬 U 盤的 %s 無法匯入：%s" % (info.get("name"), info.get("message")), True)
         elif kind == "delivered":
-            self.ctx.toast("人員資訊表已送到考勤機的虛擬 U 盤，請在考勤機執行【上傳用戶資訊】")
+            self.ctx.toast("人員資訊表已送到考勤機的虛擬 U 盤，請在考勤機執行【上傳用戶信息】")
 
     def _check_update(self):
         from .. import update
@@ -321,10 +368,11 @@ class App:
 
     def render_sidebar(self):
         items = []
+        hidden = self.hidden()
         for sid, title, icon, tone in MENU:
-            if self.is_web and sid in WEB_HIDDEN:
+            if sid in hidden:
                 continue
-            if self.is_web and sid == "usb":
+            if (self.is_web or self.mobile) and sid == "usb":
                 title = "上傳打卡檔"
             sel = sid == self.current
             bg, fg = T.TONES[tone]
@@ -343,27 +391,55 @@ class App:
                                                       size=13, weight=ft.FontWeight.W_600)], spacing=6),
                                       bgcolor=T.ACCENT, border_radius=20, margin=ft.Margin.only(top=12),
                                       padding=ft.Padding.symmetric(horizontal=12, vertical=6),
-                                      on_click=lambda e: self.go("system"), tooltip="按這裡更新"))
+                                      on_click=self.update_info.get("mobile_open") or (lambda e: self.go("system")),
+                                      tooltip="按這裡更新"))
         self.sidebar.controls = items
+
+    def hidden(self):
+        if self.mobile:
+            from .mobile import MOBILE_HIDDEN
+            return MOBILE_HIDDEN
+        return WEB_HIDDEN if self.is_web else set()
 
     def go(self, sid, **kw):
         from . import views
         self.ctx.stop_voice()
-        if self.is_web and sid in WEB_HIDDEN:
+        if sid in self.hidden():
             sid = "home"
         self.current = sid
         self.render_sidebar()
+        phone = self.mobile and T.MOBILE
+        if phone:
+            from . import mobile
+            self.title.value = next((t for s, t, *_ in MENU if s == sid), "")
+            if sid == "usb":
+                self.title.value = "上傳打卡檔"
+            self.page.run_task(mobile.close_drawer, self.page)
         try:
-            self.body.content = views.build(sid, self.ctx, **kw)
+            content = views.build(sid, self.ctx, **kw)
+            if phone:
+                T.mobilize(content)
+                content = ft.Column([content], scroll=ft.ScrollMode.AUTO, expand=True)
+            self.body.content = content
         except Exception as e:
             log.exception("view %s", sid)
             self.body.content = T.empty_state(I.ERROR_OUTLINE, "畫面載入失敗", str(e))
         self.page.update()
 
+    def _switch_server(self):
+        from . import mobile
+        mobile.switch_server(self)
+
     def logout(self):
         self.ctx.stop_voice()
+        if self.mobile:
+            from . import mobile
+            self.core.logout()
+            mobile.login(self)
+            return
         self.stop_vusb()
         self.stop_web()
+        self.stop_api()
         self.core.user = None
         self.login()
 
@@ -381,6 +457,10 @@ class App:
             pass
         try:
             self.stop_web()
+        except Exception:
+            pass
+        try:
+            self.stop_api()
         except Exception:
             pass
         if self.hr:

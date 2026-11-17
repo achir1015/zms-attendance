@@ -205,7 +205,7 @@ def removable_drives():
     return out
 
 
-# ---------------------------------------------------------------- 人員資訊表（考勤機【用戶管理】的下載／上傳用戶資訊）
+# ---------------------------------------------------------------- 人員資訊表（考勤機【用戶管理】的下載／上傳用戶信息）
 # 格式依 BS-690FCW 實際匯出的「人員資訊表.xls」（Excel 97-2003，2026-11-17 由虛擬 U 盤取得）：
 #   第 1 列 標題（合併 A:P）、第 2 列 操作說明（合併 A:P）、第 3 列 欄名、第 4 列起 資料，全部是文字。
 USER_SHEET_NAME = "人員資訊表.xls"
@@ -219,31 +219,61 @@ MAX_ENROLL = 99999999            # 工號最多 8 位數
 MAX_CARD = 9999999999            # 卡號最多 10 位數
 
 
+MAX_CARD_U32 = 4294967295        # 考勤機用 32 位元存卡號
+
+
+def check_card(card):
+    """考勤機能接受的卡號：純數字、最多 10 位、不超過 4294967295；回傳錯誤說明（沒問題回傳空字串）。"""
+    card = str(card or "").strip()
+    if not card or card == "0":
+        return ""
+    if not card.isdigit():
+        return "卡號只能是數字"
+    if len(card) > 10:
+        return "卡號最多 10 位（現在 %d 位）" % len(card)
+    if int(card) > MAX_CARD_U32:
+        return "卡號超過考勤機上限 4294967295（請確認讀卡格式，悠遊卡等 IC 卡請用十進位卡號）"
+    return ""
+
+
+def user_sheet_rows(people):
+    """人員資訊表每列 16 欄（和考勤機匯出的完全相同：全部是文字，沒有的填 0）。"""
+    rows, problems = [], []
+    seen = {}
+    for p in people:
+        en = int(p["enroll_no"])
+        who = "%s %s" % (en, p.get("name") or "")
+        if not 0 < en <= MAX_ENROLL:
+            problems.append("%s：機器工號必須是 1～8 位數字" % who)
+            continue
+        card = str(p.get("card_no") or "").strip().lstrip("0")
+        err = check_card(card)
+        if err:
+            problems.append("%s：%s" % (who, err))
+            continue
+        if card and card in seen:
+            problems.append("%s：卡號 %s 和 %s 重複" % (who, card, seen[card]))
+            continue
+        if card:
+            seen[card] = who
+        shift = p.get("shift")
+        rows.append([str(en), (p.get("name") or "")[:16], (p.get("dept_name") or "")[:16],
+                     str(shift if shift not in (None, "") else 1), "1" if int(p.get("privilege") or 0) == 1 else "0",
+                     str(int(p.get("fp") or 0)), str(int(p.get("face") or 0)), "0", card or "0", "0", "0", "0",
+                     "", "", "", ""])
+    return rows, problems
+
+
 def write_user_sheet(path, people):
-    """產生考勤機【用戶管理】→【上傳用戶資訊】可讀的人員資訊表.xls。
-    people：[dict(enroll_no, name, dept_name, card_no, privilege, fp, face, shift)]。"""
-    import xlwt
-    wb = xlwt.Workbook(encoding="utf-8")
-    ws = wb.add_sheet("人員資訊表")
-    title = xlwt.easyxf("font: bold on, height 280; align: horiz center, vert center")
-    note = xlwt.easyxf("align: wrap on, vert top")
-    head = xlwt.easyxf("font: bold on; align: horiz center")
-    ws.write_merge(0, 0, 0, 15, "人員資訊表", title)
-    ws.write_merge(1, 1, 0, 15, USER_SHEET_NOTE, note)
-    ws.row(1).height_mismatch = True
-    ws.row(1).height = 900
-    for c, (h, w) in enumerate(zip(USER_SHEET_HEADER, USER_SHEET_WIDTHS)):
-        ws.write(2, c, h, head)
-        ws.col(c).width = w
-    for r, p in enumerate(people, start=3):
-        card = str(p.get("card_no") or "").strip()
-        row = [str(int(p["enroll_no"])), (p.get("name") or "")[:16], (p.get("dept_name") or "")[:16],
-               str(p.get("shift") if p.get("shift") not in (None, "") else 1), "1" if int(p.get("privilege") or 0) == 1 else "0",
-               str(int(p.get("fp") or 0)), str(int(p.get("face") or 0)), "0", card if card else "0", "0", "0", "0",
-               "", "", "", ""]
-        for c, v in enumerate(row):
-            ws.write(r, c, v)
-    wb.save(path)
+    """產生考勤機【用戶管理】→【上傳用戶信息】可讀的人員資訊表.xls（照機器匯出檔的結構，見 att/xlsbiff.py）。
+    people：[dict(enroll_no, name, dept_name, card_no, privilege, fp, face, shift)]。
+    有考勤機不接受的資料（卡號太長、重複等）會整份不產生，並列出要修正的員工。"""
+    from .xlsbiff import write_from_template
+    rows, problems = user_sheet_rows(people)
+    if problems:
+        from .core import BizError
+        raise BizError("下面的員工資料考勤機不接受，請先到「員工與卡號」修正：\n" + "\n".join(problems[:10]))
+    write_from_template(path, rows)
     return path
 
 

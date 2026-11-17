@@ -22,6 +22,16 @@ class DB:
         self._tl.c = c
         return c
 
+    def close(self):
+        """關閉此執行緒的連線（手機連線服務每個請求用完就關）。"""
+        c = getattr(self._tl, "c", None)
+        self._tl.c = None
+        if c is not None:
+            try:
+                c.close()
+            except Exception:
+                pass
+
     def rows(self, sql, args=None):
         with self.conn.cursor() as cur:
             cur.execute(sql, args)

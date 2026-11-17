@@ -1,7 +1,7 @@
 """「上傳到刷卡機」流程頁：把人事薪資差勤系統的員工送到考勤機，並確認已在機器上。
 
 ① 人事系統的員工 → ② 機器工號 → ③ 感應卡（選用）→ ④ 送出人員資訊表（虛擬 U 盤或隨身碟）
-→ ⑤ 在考勤機【上傳用戶資訊】、現場登錄人臉／指紋 → ⑥ 考勤機【下載用戶資訊】傳回，系統自動比對
+→ ⑤ 在考勤機【上傳用戶信息】、現場登錄人臉／指紋 → ⑥ 考勤機【下載用戶信息】傳回，系統自動比對
 """
 import flet as ft
 
@@ -83,11 +83,11 @@ class ToDevice(ft.Column):
                     T.btn("存到隨身碟", I.SAVE_ALT, self.save_stick, kind="outline", disabled=not can)],
                    wrap=True, spacing=10)], spacing=8), "amber")
         s5 = step_card(5, "在考勤機上操作", None, ft.Column([
-            T.muted("1. 點考勤機螢幕叫出右側選單 →【用戶管理】→【上傳用戶資訊】（虛擬 U 盤已插著；用隨身碟的請先插上）。", 13),
+            T.muted("1. 點考勤機螢幕叫出右側選單 →【用戶管理】→【上傳用戶信息】（虛擬 U 盤已插著；用隨身碟的請先插上）。", 13),
             T.muted("2. 人臉、指紋只能在考勤機現場登錄：【用戶管理】→【用戶瀏覽】→ 選員工 → 編輯 → 面部／指紋。", 13),
             T.muted("3. 卡號沒有在系統輸入的，同一個畫面按「卡」，把悠遊卡等 IC 卡放到感應區。", 13)], spacing=4), "sky")
         s6 = step_card(6, "確認已在機器上", bool(on_dev) and not missing_dev, ft.Column([
-            T.muted("在考勤機【用戶管理】→【下載用戶資訊】，人員資訊表會經虛擬 U 盤自動傳回，系統自動比對並帶入卡號、人臉與指紋。", 13),
+            T.muted("在考勤機【用戶管理】→【下載用戶信息】，人員資訊表會經虛擬 U 盤自動傳回，系統自動比對並帶入卡號、人臉與指紋。", 13),
             T.muted(("最近一次比對：%s　已在機器上 %d 人、還沒在機器上 %d 人%s" %
                      (self.ts(last_check), len(on_dev), len(missing_dev),
                       ("、在機器上但還沒登錄人臉指紋或卡 %d 人" % len(no_face)) if no_face else ""))
@@ -132,7 +132,7 @@ class ToDevice(ft.Column):
             r = self.ctx.guard(vusb.queue_user_sheet, self.ctx.core, 1, only)
             if r:
                 self.ctx.close()
-                self.ctx.toast("已送出 %d 人，虛擬 U 盤約 15 秒內取走；接著到考勤機【用戶管理】→【上傳用戶資訊】" % r["count"])
+                self.ctx.toast("已送出 %d 人，虛擬 U 盤約 15 秒內取走；接著到考勤機【用戶管理】→【上傳用戶信息】" % r["count"])
                 self.refresh()
         self._mode_dialog("經虛擬 U 盤送出人員資訊表", go)
 
@@ -145,7 +145,7 @@ class ToDevice(ft.Column):
             path = await self.ctx.save_generated(usbfmt.USER_SHEET_NAME, write, open_after=False)
             if path and box.get("r"):
                 self.ctx.close()
-                self.ctx.toast("已存好 %d 人。請把「%s」放在隨身碟根目錄，插到考勤機後【上傳用戶資訊】"
+                self.ctx.toast("已存好 %d 人。請把「%s」放在隨身碟根目錄，插到考勤機後【上傳用戶信息】"
                                % (box["r"]["count"], usbfmt.USER_SHEET_NAME))
                 self.refresh()
 
