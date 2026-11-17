@@ -406,6 +406,9 @@ class Core:
         self.need()
         res = dict(matched=0, created=0, cards=0, skipped=[])
         by_enroll = self.emp_by_enroll()
+        # 人員資訊表是機器上全部的用戶：先全部標成「不在機器上」，對到的再標回來
+        self.db.exec("UPDATE att_enroll SET on_device=0")
+        on_machine = {int(p["enroll_no"]) for p in people}
         names = {}
         for e in self.db.rows("SELECT code, name FROM employees WHERE status<>'Q'"):
             names.setdefault(e["name"], []).append(e["code"])
@@ -447,7 +450,7 @@ class Core:
                 continue
             res["matched"] += 1
             # 機器上的實況：不改 updated（不會被當成「要再送回機器」的變更）
-            self.db.exec("UPDATE att_enroll SET fp=%s, face=%s, privilege=%s WHERE emp=%s",
+            self.db.exec("UPDATE att_enroll SET fp=%s, face=%s, privilege=%s, on_device=1, device_seen=NOW() WHERE emp=%s",
                          (int(p.get("fp") or 0), int(p.get("face") or 0), int(p.get("privilege") or 0), emp))
             card = (p.get("card_no") or "").lstrip("0")
             if card:
@@ -463,3 +466,13 @@ class Core:
             self.attach_unmatched()
         self.log("att_sync_sheet", source, "對到 %d、新建 %d、卡號 %d" % (res["matched"], res["created"], res["cards"]))
         return res
+
+    def device_status(self):
+        """上傳流程頁用：每位在職員工在考勤機上的狀態。"""
+        rows = self.db.rows(
+            "SELECT e.code, e.name, d.name AS dept_name, a.enroll_no, a.on_device, a.device_seen, a.fp, a.face, "
+            "a.updated, c.card_no FROM employees e LEFT JOIN departments d ON d.code=e.dept "
+            "LEFT JOIN att_enroll a ON a.emp=e.code LEFT JOIN att_cards c ON c.emp=e.code "
+            "WHERE e.status<>'Q' ORDER BY e.code")
+        last_check = self.db.value("SELECT MAX(device_seen) FROM att_enroll")
+        return rows, last_check

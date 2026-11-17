@@ -186,3 +186,20 @@ def test_parse_real_device_agl():
     assert verifies == {"face", "fp", "card"}
     first = p["records"][0]
     assert first["enroll_no"] == 10000001 and first["ts"] == T(2024, 1, 8, 11, 49, 55) and first["verify"] == "face"
+
+
+def test_device_status_marks_on_device(core):
+    from att.usbfmt import read_user_sheet
+    ppl = read_user_sheet(os.path.join(FILES, "device_users.xls"))
+    add_emp(core, "A07", ppl[1]["name"])
+    add_emp(core, "A08", "不在機器")
+    rows, last = core.device_status()
+    assert last is None and not any(r["on_device"] for r in rows)
+    core.sync_from_device_sheet(ppl, create_missing=False)
+    rows, last = core.device_status()
+    st = {r["code"]: r for r in rows}
+    assert last is not None and st["A07"]["on_device"] and not st["A08"]["on_device"]
+    # 機器上刪掉後再比對 → 不在機器上
+    core.sync_from_device_sheet([p for p in ppl if p["name"] != ppl[1]["name"]], create_missing=False)
+    st = {r["code"]: r for r in core.device_status()[0]}
+    assert not st["A07"]["on_device"]

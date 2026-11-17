@@ -1,7 +1,7 @@
 """刷卡考勤系統的資料表：建在人事薪資差勤系統的同一個資料庫裡（att_ 開頭），
 員工用人事系統的 employees，打卡結果寫進人事系統的 punches。"""
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 TABLES = [
     # 考勤機
@@ -107,6 +107,9 @@ UPGRADES = {
 )""",
     ],
     4: ["ALTER TABLE att_vusb ADD COLUMN IF NOT EXISTS diag VARCHAR(255) NOT NULL DEFAULT ''"],
+    # 員工是否已在考勤機上（依最近一次考勤機匯出的人員資訊表）
+    5: ["ALTER TABLE att_enroll ADD COLUMN IF NOT EXISTS on_device TINYINT NOT NULL DEFAULT 0",
+        "ALTER TABLE att_enroll ADD COLUMN IF NOT EXISTS device_seen DATETIME NULL"],
 }
 
 # 本系統寫進人事 punches.source 的值

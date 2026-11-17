@@ -38,7 +38,7 @@ class VirtualUsb(ft.Column):
             T.page_header(I.WIFI_TETHERING, "虛擬 U 盤",
                           "插在考勤機上的 ESP32-S3 模擬 U 盤，經 Wi-Fi 自動把打卡檔傳回、把人員資訊表送過去", "amber",
                           actions=[T.btn("送人員資訊表到考勤機", I.SEND, self.send_sheet, disabled=not can),
-                                   help_button(ctx, "vusb")]),
+                                   help_button(ctx, "vusb_place")]),
             T.card(ft.Column([T.title_text("接收服務", 17), self.enabled, self.svc], spacing=10)),
             T.title_text("考勤機上的虛擬 U 盤", 17), self.agents_box,
             ft.Row([T.card(ft.Column([T.title_text("送往考勤機", 16), self.outbox_grid], spacing=8), expand=True),

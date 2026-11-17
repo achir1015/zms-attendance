@@ -20,6 +20,7 @@ MENU = [
     ("vusb", "虛擬 U 盤", I.WIFI_TETHERING, "amber"),
     ("usb", "隨身碟匯入", I.USB, "orange"),
     ("employees", "員工與卡號", I.BADGE, "violet"),
+    ("todevice", "上傳到刷卡機", I.SEND_TO_MOBILE, "teal"),
     ("records", "打卡紀錄", I.FINGERPRINT, "teal"),
     ("imports", "匯入紀錄", I.HISTORY, "slate"),
     ("devices", "考勤機", I.DEVICES, "sky"),

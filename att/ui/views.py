@@ -20,7 +20,12 @@ PRIV = {0: "用戶", 1: "管理員", 2: "超級用戶"}
 
 def build(sid, ctx, **kw):
     return {"home": Home, "usb": UsbImport, "employees": Employees, "records": Records, "imports": Imports,
-            "devices": Devices, "u600": U600, "help": Help, "system": System, "vusb": _vusb_page}[sid](ctx, **kw)
+            "devices": Devices, "u600": U600, "help": Help, "system": System, "vusb": _vusb_page, "todevice": _todevice_page}[sid](ctx, **kw)
+
+
+def _todevice_page(ctx, **kw):
+    from .flowview import ToDevice
+    return ToDevice(ctx)
 
 
 def _vusb_page(ctx, **kw):
@@ -540,6 +545,9 @@ class Help(ft.Row):
                     T.btn("停止", I.STOP_CIRCLE, lambda e: self.stop(), kind="outline")], spacing=14),
             ft.Container(ft.Row(row, wrap=True, spacing=8, run_spacing=12,
                                 vertical_alignment=ft.CrossAxisAlignment.CENTER), padding=10),
+            *([ft.Container(ft.Image(src=g["image"], fit=ft.BoxFit.CONTAIN), border_radius=14,
+                            clip_behavior=ft.ClipBehavior.ANTI_ALIAS, border=ft.Border.all(1, "#E2E8F0"))]
+              if g.get("image") else []),
             ft.Container(ft.Text(g["voice"], size=15, color=T.TEXT), bgcolor="#F7F9FC", border_radius=14, padding=18),
             ft.Row([T.btn("上一課", I.CHEVRON_LEFT, lambda e: self.show(GUIDE[idx - 1]["key"], autoplay=True),
                           kind="outline", disabled=idx == 0),
